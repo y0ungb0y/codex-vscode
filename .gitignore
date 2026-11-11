@@ -10,4 +10,4 @@ __pycache__/
 auth.json
 client-connection.json
 *.vsix
-AMAX-Codex?????????.md
+AMAX-*.md
