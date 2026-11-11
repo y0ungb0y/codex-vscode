@@ -1,0 +1,13 @@
+node_modules/
+dist/
+releases/
+.test-vscode/
+__pycache__/
+*.pyc
+.build/
+.env
+.env.*
+auth.json
+client-connection.json
+*.vsix
+AMAX-Codex?????????.md

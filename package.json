@@ -1,0 +1,379 @@
+{
+  "name": "cx-codex-accounts",
+  "displayName": "CX · Codex 账号管理",
+  "description": "统一查看 Codex 各供应商历史会话、管理第三方模型目录、账号、额度和 API Key。",
+  "version": "0.3.1",
+  "publisher": "wangxin-local",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "codex",
+    "account",
+    "quota",
+    "ssh",
+    "cx"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "main": "./src/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false
+    },
+    "virtualWorkspaces": false
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "cxAccounts",
+          "title": "CX 账号",
+          "icon": "media/accounts.svg"
+        }
+      ]
+    },
+    "views": {
+      "cxAccounts": [
+        {
+          "id": "cxAccounts.accounts",
+          "name": "Codex 账号",
+          "contextualTitle": "CX 账号管理"
+        },
+        {
+          "id": "cxAccounts.providers",
+          "name": "第三方供应商",
+          "contextualTitle": "CX 供应商管理"
+        },
+        {
+          "id": "cxAccounts.history",
+          "name": "统一历史会话",
+          "contextualTitle": "CX 统一历史"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "cxAccounts.refresh",
+        "title": "CX: 刷新三个账号额度",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "cxAccounts.switch",
+        "title": "CX: 切换 Codex 账号",
+        "icon": "$(arrow-swap)"
+      },
+      {
+        "command": "cxAccounts.login",
+        "title": "CX: 授权 / 重新授权账号",
+        "icon": "$(key)"
+      },
+      {
+        "command": "cxAccounts.reload",
+        "title": "CX: 重载窗口使账号生效",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "cxAccounts.openGuide",
+        "title": "CX: 打开使用说明",
+        "icon": "$(book)"
+      },
+      {
+        "command": "cxAccounts.settings",
+        "title": "CX: 打开设置",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "cxAccounts.providerAdd",
+        "title": "CX: 添加第三方供应商",
+        "icon": "$(add)"
+      },
+      {
+        "command": "cxAccounts.providerEdit",
+        "title": "CX: 编辑供应商 / 更换 API Key",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "cxAccounts.providerSwitch",
+        "title": "CX: 启用第三方供应商",
+        "icon": "$(arrow-swap)"
+      },
+      {
+        "command": "cxAccounts.providerDelete",
+        "title": "CX: 删除供应商及 API Key",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "cxAccounts.providerRestore",
+        "title": "CX: 恢复接入前配置",
+        "icon": "$(history)"
+      },
+      {
+        "command": "cxAccounts.providerImport",
+        "title": "CX: 导入当前供应商配置（兼容 CC Switch）",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "cxAccounts.providerModels",
+        "title": "CX: 发现 / 同步供应商模型菜单",
+        "icon": "$(list-selection)"
+      },
+      {
+        "command": "cxAccounts.providerModel",
+        "title": "CX: 设为供应商默认模型",
+        "icon": "$(check)"
+      },
+      {
+        "command": "cxAccounts.historyRefresh",
+        "title": "CX: 刷新所有供应商历史会话",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "cxAccounts.historyMore",
+        "title": "CX: 加载更多会话",
+        "icon": "$(chevron-down)"
+      },
+      {
+        "command": "cxAccounts.historyOpen",
+        "title": "CX: 预览历史会话",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "cxAccounts.historyContinue",
+        "title": "CX: 在 Codex 中继续会话",
+        "icon": "$(arrow-right)"
+      },
+      {
+        "command": "cxAccounts.historyFork",
+        "title": "CX: 为当前接入创建会话分支",
+        "icon": "$(git-pull-request-create)"
+      },
+      {
+        "command": "cxAccounts.historySearch",
+        "title": "CX: 搜索所有供应商会话",
+        "icon": "$(search)"
+      },
+      {
+        "command": "cxAccounts.historyArchived",
+        "title": "CX: 切换查看已归档会话",
+        "icon": "$(archive)"
+      },
+      {
+        "command": "cxAccounts.historyOlder",
+        "title": "CX: 加载更早消息",
+        "icon": "$(history)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "cxAccounts.providerImport",
+          "when": "view == cxAccounts.providers",
+          "group": "navigation@2"
+        },
+        {
+          "command": "cxAccounts.refresh",
+          "when": "view == cxAccounts.accounts",
+          "group": "navigation@1"
+        },
+        {
+          "command": "cxAccounts.reload",
+          "when": "view == cxAccounts.accounts",
+          "group": "navigation@2"
+        },
+        {
+          "command": "cxAccounts.settings",
+          "when": "view == cxAccounts.accounts",
+          "group": "2_settings@1"
+        },
+        {
+          "command": "cxAccounts.openGuide",
+          "when": "view == cxAccounts.accounts",
+          "group": "2_settings@2"
+        },
+        {
+          "command": "cxAccounts.providerAdd",
+          "when": "view == cxAccounts.providers",
+          "group": "navigation@1"
+        },
+        {
+          "command": "cxAccounts.refresh",
+          "when": "view == cxAccounts.providers",
+          "group": "navigation@2"
+        },
+        {
+          "command": "cxAccounts.providerRestore",
+          "when": "view == cxAccounts.providers",
+          "group": "2_restore@1"
+        },
+        {
+          "command": "cxAccounts.reload",
+          "when": "view == cxAccounts.providers",
+          "group": "2_restore@2"
+        },
+        {
+          "command": "cxAccounts.historyRefresh",
+          "when": "view == cxAccounts.history",
+          "group": "navigation@1"
+        },
+        {
+          "command": "cxAccounts.historySearch",
+          "when": "view == cxAccounts.history",
+          "group": "navigation@2"
+        },
+        {
+          "command": "cxAccounts.historyArchived",
+          "when": "view == cxAccounts.history",
+          "group": "1_history@1"
+        },
+        {
+          "command": "cxAccounts.historyOlder",
+          "when": "view == cxAccounts.history",
+          "group": "1_history@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "cxAccounts.switch",
+          "when": "view == cxAccounts.accounts && viewItem == cxAccount",
+          "group": "inline@1"
+        },
+        {
+          "command": "cxAccounts.login",
+          "when": "view == cxAccounts.accounts && viewItem == cxAccount",
+          "group": "inline@2"
+        },
+        {
+          "command": "cxAccounts.providerSwitch",
+          "when": "view == cxAccounts.providers && viewItem == cxProvider",
+          "group": "inline@1"
+        },
+        {
+          "command": "cxAccounts.providerEdit",
+          "when": "view == cxAccounts.providers && viewItem == cxProvider",
+          "group": "inline@2"
+        },
+        {
+          "command": "cxAccounts.providerDelete",
+          "when": "view == cxAccounts.providers && viewItem == cxProvider",
+          "group": "inline@3"
+        },
+        {
+          "command": "cxAccounts.historyContinue",
+          "when": "view == cxAccounts.history && viewItem == cxHistory",
+          "group": "inline@1"
+        },
+        {
+          "command": "cxAccounts.historyFork",
+          "when": "view == cxAccounts.history && viewItem == cxHistory",
+          "group": "1_history@1"
+        },
+        {
+          "command": "cxAccounts.providerModels",
+          "when": "view == cxAccounts.providers && viewItem == cxProvider",
+          "group": "inline@2"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "CX Codex 账号",
+      "properties": {
+        "cxAccounts.pythonPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Python 3.8+ 可执行文件。留空自动查找。本机与远程分别设置。"
+        },
+        "cxAccounts.codexPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Codex 后端或启动脚本绝对路径。留空使用已有启动脚本 / 官方插件后端。"
+        },
+        "cxAccounts.proxyUrl": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "HTTP 代理地址。留空沿用现有配置；AMAX 的启动脚本默认使用 28082，本机自动探测 7890。"
+        },
+        "cxAccounts.accountsRoot": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "账号目录。留空使用 ~/.codex-accounts，兼容 cx/cx-login。"
+        },
+        "cxAccounts.codexHome": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "官方插件实际使用的 Codex home。留空采用 CODEX_HOME 或 ~/.codex。"
+        },
+        "cxAccounts.refreshIntervalSeconds": {
+          "type": "number",
+          "default": 300,
+          "minimum": 60,
+          "maximum": 3600,
+          "description": "侧栏可见时自动刷新额度的间隔（秒）。"
+        },
+        "cxAccounts.autoRefresh": {
+          "type": "boolean",
+          "default": true,
+          "description": "侧栏可见时自动刷新额度。"
+        },
+        "cxAccounts.emails": {
+          "type": "object",
+          "scope": "machine",
+          "default": {
+            "1": "wangxin031220@gmail.com",
+            "2": "KadynLedue381417@outlook.fr",
+            "3": "shuiwangsanjin@gmail.com"
+          },
+          "additionalProperties": false,
+          "required": [
+            "1",
+            "2",
+            "3"
+          ],
+          "properties": {
+            "1": {
+              "type": "string"
+            },
+            "2": {
+              "type": "string"
+            },
+            "3": {
+              "type": "string"
+            }
+          },
+          "description": "三个编号对应的邮箱，授权后会校验实际邮箱。"
+        }
+      }
+    },
+    "viewsWelcome": [
+      {
+        "view": "cxAccounts.providers",
+        "contents": "图形化保存服务地址、模型和 API Key。\n[添加第三方供应商](command:cxAccounts.providerAdd)\n支持兼容 Responses API 的服务，本机与远程分别配置。"
+      },
+      {
+        "view": "cxAccounts.history",
+        "contents": "[读取所有供应商会话](command:cxAccounts.historyRefresh)\n会话保留在原机器，跨接入继续时使用原生分支。"
+      }
+    ]
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "test:python": "python -m unittest discover -s test -p test_*.py -v",
+    "package": "vsce package --no-dependencies --allow-missing-repository --out releases/cx-codex-accounts-0.3.1.vsix"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.6.0"
+  }
+}
