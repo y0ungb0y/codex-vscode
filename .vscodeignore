@@ -10,3 +10,4 @@ releases/**
 package-lock.json
 .gitignore
 .build/**
+AMAX-*.md

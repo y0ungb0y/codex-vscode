@@ -1,6 +1,24 @@
 # 验证记录
 
-版本：0.3.1；日期：2026-11-11。
+版本：0.4.0；日期：2026-11-11。
+
+## 本次 Claude Code 供应商接入
+
+- Node 测试 11 项、Python 测试 36 项通过，包含原有 Codex 回归检查和新增 Claude 表单、独立命令、模型分档、Token / x-api-key、密钥更新、CC Switch 只读导入、配置恢复、外部修改拦截、失败回滚及 Messages 请求检查。
+- Windows 本机从 CC Switch 导入两个第三方 Claude 供应商（DeepSeek、0.37），跳过官方账号占位；导入和测试时本机 Claude settings.json、Codex config.toml 和 auth.json 字节保持不变。
+- 当前 0.37 网关的 claude-fable-5-2 通过真实 Anthropic Messages 最小请求；连接测试最多请求 32 个输出 token，不发送工作区文件。
+- 安装 Anthropic 官方 Claude Code VS Code 扩展 2.1.322，调用该扩展自带的真实 claude.exe 后端，以用户配置中的网关和 claude-fable-5-2 返回 OK。测试使用临时工作目录、禁用工具和自定义 hooks / MCP，不保存测试会话。请求按供应商规则计费。
+- 清理 VS Code 用户设置中残留的占位接口与令牌覆盖，保留无关设置和 JSONC 注释；原文件备份在用户私有的 ~/.codex-accounts/claude/vscode-backups/。启用 disableLoginPrompt，使扩展读取 Claude 用户配置。
+- 本机通过 CX 的同一 JSON 桥接启用 0.37，保留 CC Switch 导入的模型分档；DeepSeek 已导入，未对其发送真实付费推理请求。
+- Claude 官方账号和统一历史仅保留前端占位；未实现登录、额度查询或历史迁移，不承诺所有第三方网关的完整工具链兼容性。
+- 新增真实 VS Code Extension Host 检查脚本，验证 Claude 命令注册和快照；本机启动该检查被 VS Code 更新锁阻止，未完成真实侧栏点击验证。现有窗口重载后可加载新版；未绕过更新锁或关闭用户窗口。
+
+## AMAX 与 GitHub 同步
+
+- AMAX 使用实际 VS Code Server 的 code-server 安装 0.4.0；安装包保存在 `/data1/xinwang/cx-codex-accounts-0.4.0.vsix`，使用说明同步至同目录的 `CX-VSCode插件使用说明.md`。
+- 在 AMAX 临时目录运行全部 36 项 Python 3.8 测试与 11 项 VS Code Server Node 测试，全部通过；未使用服务器生产凭据进行付费推理。
+- GitHub 源码、中文说明和 v0.4.0 VSIX 使用同一版本；仓库保持私有。运行时令牌、供应商密钥、用户配置与本机备份不包含在提交或安装包中。
+- AMAX 与本机分别管理 Claude 供应商；本次未复制本机 Claude 用户配置或密钥，不表示服务器上已完成真实 Claude 接口或会话验证。
 
 ## 本次历史与模型修复
 

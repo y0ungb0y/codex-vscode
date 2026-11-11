@@ -7,11 +7,12 @@ const { Client, expandHome } = require('./client');
 const { remaining, reset, translateError, summary, mergeSnapshot } = require('./model');
 const { createProviderUI } = require('./providers-ui');
 const { createHistoryUI } = require('./history-ui');
+const { createClaudeUI } = require('./claude-ui');
 
 function activate(context) {
   const configuration = () => {
     const config = vscode.workspace.getConfiguration('cxAccounts');
-    return Object.fromEntries(['pythonPath', 'codexPath', 'proxyUrl', 'accountsRoot', 'codexHome',
+    return Object.fromEntries(['pythonPath', 'codexPath', 'proxyUrl', 'accountsRoot', 'codexHome', 'claudeHome', 'ccSwitchHome',
       'refreshIntervalSeconds', 'autoRefresh', 'emails'].map(key => [key, config.get(key)]));
   };
   const client = new Client(context.extensionPath, configuration);
@@ -70,6 +71,7 @@ function activate(context) {
   };
   const providers = createProviderUI(context, client, hooks);
   const history = createHistoryUI(context, client, hooks);
+  const claude = createClaudeUI(context, client, hooks, configuration);
 
   function render(message) {
     if (disposed) return;
@@ -205,9 +207,10 @@ function activate(context) {
   const ready = refresh(false, false).then(async () => {
     if (tree.visible) await refresh(true, false);
     if (history.tree.visible) await history.refresh();
+    await claude.refresh();
   });
   // Useful for extension-host verification; exposes metadata only, never tokens.
-  return { ready, getSnapshot: () => state, refresh };
+  return { ready, getSnapshot: () => state, refresh, claude };
 }
 
 module.exports = { activate };

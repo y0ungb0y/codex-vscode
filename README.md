@@ -1,7 +1,34 @@
-# CX · Codex 账号管理
+# CX · Codex / Claude Code 供应商管理
 
 在同一个 VS Code 侧栏管理 ChatGPT 账号和第三方 Codex 供应商，兼容现有 `cx`、`cx status`、`cx-login`。
 这个个人版扩展不是 OpenAI 官方产品，不通过代理转售模型，也不合并账号额度。
+
+## Claude Code 第三方供应商（0.4.0）
+
+CX 同一侧栏新增 **Claude Code · 第三方供应商**，本版先适配本机 VS Code 的 `Anthropic.claude-code` 插件。
+Claude Code 的 **官方账号** 与 **统一历史** 区域仅为界面占位：不登录、不查询额度、不读取或迁移历史。已有 Codex 功能继续保留。
+
+1. 打开 CX，找到 **Claude Code · 第三方供应商**。
+2. 已在 CC Switch 配好：打开该区域标题栏菜单，执行 **从 CC Switch 导入 Claude 供应商**。只读 CC Switch 数据库，导入第三方地址、密钥和模型映射，跳过官方账号；不会自动切换当前接入。
+3. 已在 `~/.claude/settings.json` 配好：点击下载箭头 **导入本机 Claude 当前配置**。导入不改写该文件；可与 CC Switch 导入去重。
+4. 或点击 **+**，填写名称、Anthropic 兼容基础地址、默认模型、认证方式和 API Key。支持 `ANTHROPIC_AUTH_TOKEN`（Bearer）和 `ANTHROPIC_API_KEY`（x-api-key），可分别配置 Haiku / Sonnet / Opus / Fable / Subagent 模型映射，未填的分档在启用时使用默认模型。
+5. 点击 **保存并启用** 或供应商行双向箭头，然后执行 **开发人员：重新加载窗口**，在 Claude Code 中新建会话。
+
+Base URL 使用供应商的 Anthropic 兼容入口，例如 `https://gateway.example.com` 或 `https://api.deepseek.com/anthropic`。不要添加 `/messages`；CX 测试会使用 `/v1/messages`，基础地址已有 `/v1` 时不会重复追加。OpenAI Responses / Chat Completions 接口不能直接用作 Claude 接口。
+
+供应商行的插头按钮是 **测试连接**：发送一个最多 32 个输出 token 的最小 Messages 请求，不读取或发送工作区文件。请求按供应商规则计费，成功结果显示在侧栏和 CX 输出日志中；这只能验证最小请求，不代表已验证所有工具调用和长会话能力。
+
+密钥在 CX 的 `~/.codex-accounts/claude/providers/secrets/` 中使用当前用户加密存储（Windows DPAPI）。启用时按 Claude Code / CC Switch 的原生格式，把选中密钥写入 **用户级** `~/.claude/settings.json` 的 `env`；该用户文件和配置备份包含敏感内容，不应提交到仓库。CX 不会把密钥写到项目文件、侧栏、日志或 VSIX 中。
+
+切换只更新接入、认证和模型字段，保留其他环境变量、permissions、hooks、MCP 和插件设置。标题栏菜单的 **恢复接入前配置** 恢复 CX 首次接管时的接入字段，保留此后新增的无关配置；这不是官方账号登录功能。CX 保存与启用、删除、恢复仍采用无常规弹窗的交互。
+
+启用 Claude 供应商时，CX 通过 VS Code 设置 API 开启 `claudeCode.disableLoginPrompt`，恢复接入前配置时还原该设置。如果 `claudeCode.environmentVariables` 里已有接入覆盖项，CX 会阻止切换并说明需先清理覆盖项，以免显示的供应商和实际接入不一致。不要同时使用 CC Switch 与 CX 改写当前接入；发现外部修改后先导入当前配置或恢复。
+
+默认读写 `CLAUDE_CONFIG_DIR` 或 `~/.claude`，可在 `cxAccounts.claudeHome` 指定目录（需与 Claude Code 实际配置目录一致）；CC Switch 目录可通过 `cxAccounts.ccSwitchHome` 指定。Claude 与 Codex 的供应商记录、密钥和运行配置分开保存。
+
+Windows 本机已完成当前供应商的真实接口与 Claude 官方后端验证。AMAX 已同步安装 CX 0.4.0，并通过 Python 3.8 与 VS Code Server Node 的 47 项隔离测试；未复制本机的供应商密钥或 Claude 配置。远程使用时，在 **SSH: amax** 窗口安装 Claude Code 官方扩展，再在 CX 的 Claude 供应商区域添加密钥或导入服务器已有配置。AMAX 安装包位于 `/data1/xinwang/cx-codex-accounts-0.4.0.vsix`。
+
+配置依据：[Claude Code VS Code 官方文档](https://code.claude.com/docs/en/vs-code#use-third-party-providers)、[用户设置与优先级](https://code.claude.com/docs/en/settings)、[模型配置](https://code.claude.com/docs/en/model-config)。
 
 ## 功能
 
@@ -19,14 +46,14 @@
 
 ## 安装
 
-1. 在 VS Code 按 `Ctrl+Shift+P`，执行 **扩展：从 VSIX 安装…**（英文界面为 **Extensions: Install from VSIX...**），选择 `cx-codex-accounts-0.3.1.vsix`。
+1. 在 VS Code 按 `Ctrl+Shift+P`，执行 **扩展：从 VSIX 安装…**（英文界面为 **Extensions: Install from VSIX...**），选择 `cx-codex-accounts-0.4.0.vsix`。
 2. 本机窗口安装到本机。连接 AMAX 时，在该远程窗口再次安装，确认扩展位于 **SSH: amax**。
 3. 在命令面板执行 **开发人员：重新加载窗口**（英文界面为 **Developer: Reload Window**），然后点击左侧 **CX 账号** 图标。
 
 也可通过终端安装：
 
 ```powershell
-code --install-extension .\cx-codex-accounts-0.3.1.vsix
+code --install-extension .\cx-codex-accounts-0.4.0.vsix
 ```
 
 扩展在当前工作区所在的机器上运行：本机窗口运行在 Windows，远程窗口运行在服务器。
@@ -191,7 +218,7 @@ npm run test:python
 npm run package
 ```
 
-生成的安装包位于 `releases/cx-codex-accounts-0.3.1.vsix`。
+生成的安装包位于 `releases/cx-codex-accounts-0.4.0.vsix`。
 
 源码中的 `python/quota_status.py` 和 `python/login_account.py` 来自现有 CX 工具。
 扩展没有复制 GitHub 第三方项目的实现。

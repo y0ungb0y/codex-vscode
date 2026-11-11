@@ -13,6 +13,7 @@ import quota_status as quota
 from providers import Providers
 import history
 import model_catalog
+from claude_providers import ClaudeProviders
 
 
 def provider_store():
@@ -162,6 +163,28 @@ def select_account(number):
 def main():
     configure()
     args = sys.argv[1:]
+    if args and args[0].startswith('claude-'):
+        operations = ('snapshot', 'save', 'select', 'delete', 'restore', 'import', 'import-cc', 'models', 'test')
+        operation = args[0][len('claude-'):]
+        if len(args) != 1 or operation not in operations:
+            raise ValueError('Unsupported Claude operation')
+        options = json.loads(os.environ.get('CX_EXTENSION_OPTIONS', '{}'))
+        store = ClaudeProviders(login.ROOT, pathlib.Path(options.get('claudeHome') or os.environ.get('CLAUDE_CONFIG_DIR') or pathlib.Path.home() / '.claude').expanduser(), options.get('ccSwitchHome'))
+        payload = json.loads(sys.stdin.read(65537) or '{}')
+        if not isinstance(payload, dict):
+            raise ValueError('Claude 供应商表单无效。')
+        with OperationLock():
+            if operation == 'snapshot': result = store.snapshot()
+            elif operation == 'save': result = store.save(payload)
+            elif operation == 'select': result = store.activate(payload.get('id'))
+            elif operation == 'delete': result = store.delete(payload.get('id'))
+            elif operation == 'restore': result = store.restore(force=True)
+            elif operation == 'import': result = store.import_current()
+            elif operation == 'import-cc': result = store.import_cc_switch()
+            elif operation == 'models': result = store.models(payload)
+            else: result = store.test_connection(payload)
+            print(json.dumps(result, ensure_ascii=True))
+        return
     operations = ('snapshot', 'status', 'select', 'login', 'provider-save', 'provider-select', 'provider-delete', 'provider-restore', 'provider-import', 'provider-models', 'history-list', 'history-read', 'history-fork')
     if not args or args[0] not in operations:
         raise ValueError('Unsupported operation')

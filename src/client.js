@@ -65,6 +65,7 @@ class Client {
       CX_EXTENSION_OPTIONS: JSON.stringify({
         accountsRoot: expandHome(opts.accountsRoot || ''), codexHome: expandHome(opts.codexHome || ''),
         codexPath: expandHome(opts.codexPath || ''), proxyUrl: opts.proxyUrl || '', emails: opts.emails,
+        claudeHome: expandHome(opts.claudeHome || ''), ccSwitchHome: expandHome(opts.ccSwitchHome || ''),
       }) };
   }
   async interpreter() {
@@ -109,6 +110,12 @@ class Client {
     const python = await this.interpreter();
     return runJson(python[0], [...python.slice(1), this.bridge, `provider-${operation}`],
       { env: this.environment(), input: payload, timeout: operation === 'models' ? 25000 : 15000 });
+  }
+  async claudeRequest(operation, payload = {}) {
+    if (!['snapshot', 'save', 'select', 'delete', 'restore', 'import', 'import-cc', 'models', 'test'].includes(operation)) throw new Error('无效的 Claude 供应商操作。');
+    const python = await this.interpreter();
+    return runJson(python[0], [...python.slice(1), this.bridge, `claude-${operation}`],
+      { env: this.environment(), input: payload, timeout: operation === 'test' ? 35000 : 15000 });
   }
   async historyRequest(operation, payload = {}) {
     if (!['list', 'read', 'fork'].includes(operation)) throw new Error('无效的会话操作。');

@@ -18,11 +18,15 @@ for number, email in emails.items():
 home = root / 'codex'
 home.mkdir(exist_ok=True)
 (home / 'auth.json').write_bytes((root / 'accounts/3/auth.json').read_bytes())
+claude_home = root / 'claude'
+claude_home.mkdir(exist_ok=True)
+(claude_home / 'settings.json').write_text('{}', encoding='utf-8')
 (settings_dir / 'settings.json').write_text(json.dumps({
     'cxAccounts.pythonPath': sys.executable,
     'cxAccounts.codexPath': sys.executable,
     'cxAccounts.accountsRoot': str(root / 'accounts'),
     'cxAccounts.codexHome': str(home),
+    'cxAccounts.claudeHome': str(claude_home),
     'cxAccounts.emails': emails,
     'cxAccounts.autoRefresh': False,
     'security.workspace.trust.enabled': False,
