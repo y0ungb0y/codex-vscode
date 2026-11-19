@@ -91,13 +91,13 @@ class Client {
   }
   async request(operation, number) {
     if (!['snapshot', 'status', 'select'].includes(operation)) throw new Error('无效的账号操作。');
-    if (operation === 'select' && !['1', '2', '3'].includes(number)) throw new Error('无效的账号编号。');
+    if (operation === 'select' && !/^[1-9][0-9]{0,5}$/.test(number || '')) throw new Error('无效的账号编号。');
     const python = await this.interpreter();
     return runJson(python[0], [...python.slice(1), this.bridge, operation, ...(number ? [number] : [])],
       { env: this.environment(), timeout: operation === 'status' ? 45000 : 10000 });
   }
   async loginTerminalOptions(number) {
-    if (!['1', '2', '3'].includes(number)) throw new Error('无效的账号编号。');
+    if (!/^[1-9][0-9]{0,5}$/.test(number || '')) throw new Error('无效的账号编号。');
     const python = await this.interpreter();
     return {
       name: `CX 授权 · 账号 ${number}`, shellPath: python[0],
@@ -110,6 +110,12 @@ class Client {
     const python = await this.interpreter();
     return runJson(python[0], [...python.slice(1), this.bridge, `provider-${operation}`],
       { env: this.environment(), input: payload, timeout: operation === 'models' ? 25000 : 15000 });
+  }
+  async accountRequest(operation, payload = {}) {
+    if (!['add', 'delete'].includes(operation)) throw new Error('无效的账号管理操作。');
+    const python = await this.interpreter();
+    return runJson(python[0], [...python.slice(1), this.bridge, `account-${operation}`],
+      { env: this.environment(), input: payload, timeout: 15000 });
   }
   async claudeRequest(operation, payload = {}) {
     if (!['snapshot', 'save', 'select', 'delete', 'restore', 'import', 'import-cc', 'models', 'test'].includes(operation)) throw new Error('无效的 Claude 供应商操作。');

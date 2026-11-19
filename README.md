@@ -26,13 +26,23 @@ Base URL 使用供应商的 Anthropic 兼容入口，例如 `https://gateway.exa
 
 默认读写 `CLAUDE_CONFIG_DIR` 或 `~/.claude`，可在 `cxAccounts.claudeHome` 指定目录（需与 Claude Code 实际配置目录一致）；CC Switch 目录可通过 `cxAccounts.ccSwitchHome` 指定。Claude 与 Codex 的供应商记录、密钥和运行配置分开保存。
 
-Windows 本机已完成当前供应商的真实接口与 Claude 官方后端验证。AMAX 已同步安装 CX 0.4.0，并通过 Python 3.8 与 VS Code Server Node 的 47 项隔离测试；未复制本机的供应商密钥或 Claude 配置。远程使用时，在 **SSH: amax** 窗口安装 Claude Code 官方扩展，再在 CX 的 Claude 供应商区域添加密钥或导入服务器已有配置。AMAX 安装包位于 `/data1/xinwang/cx-codex-accounts-0.4.0.vsix`。
+Windows 本机已完成当前供应商的真实接口与 Claude 官方后端验证。AMAX 已同步安装 CX 0.4.0，并通过 Python 3.8 与 VS Code Server Node 的 47 项隔离测试；未复制本机的供应商密钥或 Claude 配置。远程使用时，在 **SSH: amax** 窗口安装 Claude Code 官方扩展，再在 CX 的 Claude 供应商区域添加密钥或导入服务器已有配置。AMAX 安装包位于 `/data1/xinwang/cx-codex-accounts-0.5.0.vsix`。
 
 配置依据：[Claude Code VS Code 官方文档](https://code.claude.com/docs/en/vs-code#use-third-party-providers)、[用户设置与优先级](https://code.claude.com/docs/en/settings)、[模型配置](https://code.claude.com/docs/en/model-config)。
 
+## 添加与删除 Codex 账号（0.5.0）
+
+在 **Codex 账号** 标题栏点击 **+**，填写 ChatGPT 账号邮箱。CX 自动分配新编号并打开设备码授权终端，使用该邮箱在浏览器完成授权；授权成功后可查询额度、切换账号。取消或失败的授权会保留一个“尚未授权”的账号，可点击钥匙重试，也可删除。添加账号不会切换正在使用的账号。
+
+账号行的 **垃圾桶** 用于删除本机账号记录和保存的登录凭据，操作结果显示在侧栏和 CX 输出日志中。当前正在使用的账号需先切换到其他账号再删除；授权任务进行时暂不允许添加或删除账号。删除不会重排其余编号，也不会复用已删除编号。
+
+首次升级继续使用原有账号 1 / 2 / 3 和凭据目录，无需重新登录。首次添加或删除后，动态列表保存在 `~/.codex-accounts/accounts.json`，后续以该文件为准；`cxAccounts.emails` 只作为未创建动态列表时的初始设置。空列表会显示“添加 Codex 账号”入口。
+
+删除的凭据备份保存在 `~/.codex-accounts/account-delete-backups/`，属于本机敏感资料。删除只影响当前机器的 CX 列表和登录副本，不注销云端账号、不删除历史会话。原有 `cx` / `cx-login` 终端脚本可能仍只支持旧编号；新增账号请通过 CX 侧栏管理。本机与远程分别管理账号。
+
 ## 功能
 
-- 左侧 **CX 账号** 图标显示三个账号，当前选择用绿色标记。
+- 左侧 **CX 账号** 图标显示账号列表，支持添加与删除，当前选择用绿色标记。
 - 每个账号显示邮箱、5 小时剩余比例、周剩余比例、北京时间重置时间和套餐。
 - 鼠标移到账号行，点击 **双向箭头** 切换，点击 **钥匙** 授权。
 - 顶部刷新按钮查询所有账号；状态栏显示当前选择及额度。
@@ -46,20 +56,20 @@ Windows 本机已完成当前供应商的真实接口与 Claude 官方后端验�
 
 ## 安装
 
-1. 在 VS Code 按 `Ctrl+Shift+P`，执行 **扩展：从 VSIX 安装…**（英文界面为 **Extensions: Install from VSIX...**），选择 `cx-codex-accounts-0.4.0.vsix`。
+1. 在 VS Code 按 `Ctrl+Shift+P`，执行 **扩展：从 VSIX 安装…**（英文界面为 **Extensions: Install from VSIX...**），选择 `cx-codex-accounts-0.5.0.vsix`。
 2. 本机窗口安装到本机。连接 AMAX 时，在该远程窗口再次安装，确认扩展位于 **SSH: amax**。
 3. 在命令面板执行 **开发人员：重新加载窗口**（英文界面为 **Developer: Reload Window**），然后点击左侧 **CX 账号** 图标。
 
 也可通过终端安装：
 
 ```powershell
-code --install-extension .\cx-codex-accounts-0.4.0.vsix
+code --install-extension .\cx-codex-accounts-0.5.0.vsix
 ```
 
 扩展在当前工作区所在的机器上运行：本机窗口运行在 Windows，远程窗口运行在服务器。
 侧栏标题会标明机器名。需要信任当前工作区才能使用。
 
-## 三个账号
+## 初始账号
 
 | 编号 | 默认邮箱 |
 | --- | --- |
@@ -67,7 +77,7 @@ code --install-extension .\cx-codex-accounts-0.4.0.vsix
 | 2 | KadynLedue381417@outlook.fr |
 | 3 | shuiwangsanjin@gmail.com |
 
-可在设置中修改 `cxAccounts.emails`。扩展只打包程序和默认邮箱，不打包任何登录令牌。
+初始邮箱可在设置 `cxAccounts.emails` 中指定；日常添加和删除请使用侧栏。扩展只打包程序和默认邮箱，不打包任何登录令牌。
 
 ## 图形化添加第三方供应商
 
@@ -218,7 +228,7 @@ npm run test:python
 npm run package
 ```
 
-生成的安装包位于 `releases/cx-codex-accounts-0.4.0.vsix`。
+生成的安装包位于 `releases/cx-codex-accounts-0.5.0.vsix`。
 
 源码中的 `python/quota_status.py` 和 `python/login_account.py` 来自现有 CX 工具。
 扩展没有复制 GitHub 第三方项目的实现。

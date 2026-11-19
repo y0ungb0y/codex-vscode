@@ -14,6 +14,7 @@ from providers import Providers
 import history
 import model_catalog
 from claude_providers import ClaudeProviders
+from account_registry import AccountRegistry
 
 
 def provider_store():
@@ -24,10 +25,8 @@ def configure():
     options = json.loads(os.environ.get('CX_EXTENSION_OPTIONS', '{}'))
     login.ROOT = pathlib.Path(options.get('accountsRoot') or pathlib.Path.home() / '.codex-accounts').expanduser()
     login.DEFAULT = pathlib.Path(options.get('codexHome') or os.environ.get('CODEX_HOME') or pathlib.Path.home() / '.codex').expanduser() / 'auth.json'
-    emails = options.get('emails') or login.EMAILS
-    if set(emails) != {'1', '2', '3'} or any(not isinstance(e, str) or '@' not in e for e in emails.values()):
-        raise ValueError('Invalid account email settings')
-    login.EMAILS = emails
+    seeds = options.get('emails') if options.get('emails') is not None else login.DEFAULT_EMAILS
+    login.EMAILS = AccountRegistry(login.ROOT, seeds).emails()
     command = options.get('codexPath')
     if command:
         executable = pathlib.Path(command).expanduser()
@@ -77,6 +76,7 @@ class OperationLock:
 
 
 def snapshot():
+    login.reload_accounts()
     selected = login.save_current()
     current = quota.identity(login.DEFAULT.parent)
     return {
@@ -106,6 +106,8 @@ def status():
             by_id[number]['error'] = 'stored login email mismatch; not queried'
         else:
             jobs.append((number, home, auth['account_id']))
+    if not jobs:
+        return data
     command = quota.backend_command()
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
@@ -124,6 +126,7 @@ def status():
 
 
 def select(number):
+    login.reload_accounts()
     if number not in login.EMAILS or login.slot(quota.identity(login.ROOT / number)) != number:
         raise ValueError('Account is not signed in with the expected email; authorize it first')
     with provider_store().account_mode():
@@ -132,7 +135,7 @@ def select(number):
 
 def select_account(number):
     if number not in login.EMAILS:
-        raise ValueError('Choose account 1, 2, or 3')
+        raise ValueError('请选择账号列表中的有效编号。')
     target = login.ROOT / number / 'auth.json'
     if login.slot(quota.identity(target.parent)) != number:
         raise ValueError('Account is not signed in with the expected email; authorize it first')
@@ -185,14 +188,37 @@ def main():
             else: result = store.test_connection(payload)
             print(json.dumps(result, ensure_ascii=True))
         return
-    operations = ('snapshot', 'status', 'select', 'login', 'provider-save', 'provider-select', 'provider-delete', 'provider-restore', 'provider-import', 'provider-models', 'history-list', 'history-read', 'history-fork')
+    operations = ('snapshot', 'status', 'select', 'login', 'account-add', 'account-delete', 'provider-save', 'provider-select', 'provider-delete', 'provider-restore', 'provider-import', 'provider-models', 'history-list', 'history-read', 'history-fork')
     if not args or args[0] not in operations:
         raise ValueError('Unsupported operation')
     if args[0] in ('select', 'login') and (len(args) != 2 or args[1] not in login.EMAILS):
-        raise ValueError('Choose account 1, 2, or 3')
+        raise ValueError('请选择账号列表中的有效编号。')
     if args[0] in ('snapshot', 'status') and len(args) != 1:
         raise ValueError('Unsupported arguments')
     with OperationLock():
+        # Re-read under the cross-window lock; a competing window may have changed accounts.
+        login.reload_accounts()
+        if args[0].startswith('account-'):
+            if len(args) != 1:
+                raise ValueError('Unsupported arguments')
+            payload = json.loads(sys.stdin.read(65537) or '{}')
+            if not isinstance(payload, dict):
+                raise ValueError('账号参数无效。')
+            store = AccountRegistry(login.ROOT, login.EMAILS)
+            if args[0] == 'account-add':
+                number = store.add(payload.get('email'))
+                login.reload_accounts()
+                result = {**snapshot(), 'addedId': number}
+            else:
+                identity = quota.identity(login.DEFAULT.parent)
+                expected = payload.get('expectedEmail')
+                if expected is not None and not isinstance(expected, str):
+                    raise ValueError('账号邮箱无效。')
+                backup = store.remove(payload.get('id'), login.DEFAULT, (identity or {}).get('email'), expected)
+                login.reload_accounts()
+                result = {**snapshot(), 'deletedId': payload.get('id'), 'backupPath': backup}
+            print(json.dumps(result, ensure_ascii=True))
+            return
         if args[0].startswith('history-'):
             if len(args) != 1: raise ValueError('Unsupported arguments')
             payload = json.loads(sys.stdin.read(65537))

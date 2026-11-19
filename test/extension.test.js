@@ -5,10 +5,12 @@ const Module = require('node:module');
 test('extension wires account tree, switch/reload choice, login task and quota refresh', async () => {
   const commands = new Map(), events = {}, executed = [], bars = [];
   const disposable = () => ({ dispose() {} });
-  const data = () => ({ selected: '3', accounts: [1, 2, 3].map(n => ({
+  const initialAccounts = [1, 2, 3].map(n => ({
     id: String(n), email: `account${n}@example.invalid`, saved: true, selected: n === 3,
-  })) });
-  let selected = '3', bridgeCalls = [], task, thirdParty = false;
+  }));
+  let accounts = initialAccounts;
+  const data = () => ({ selected: '3', accounts: accounts.map(a => ({ ...a })) });
+  let selected = '3', bridgeCalls = [], task, taskExecution, thirdParty = false;
   class FakeClient {
     async request(operation, number) {
       bridgeCalls.push(operation);
@@ -23,6 +25,13 @@ test('extension wires account tree, switch/reload choice, login task and quota r
     }
     async loginTerminalOptions(number) {
       return { shellPath: 'python3', shellArgs: ['bridge.py', 'login', number], env: { PYTHONIOENCODING: 'utf-8' } };
+    }
+    async accountRequest(operation, payload) {
+      bridgeCalls.push(operation);
+      if (operation === 'add') accounts = [...accounts, { id: '4', email: payload.email, saved: false }];
+      else if (operation === 'delete') accounts = accounts.filter(a => a.id !== payload.id);
+      const result = await this.request('snapshot');
+      return { ...result, addedId: operation === 'add' ? '4' : undefined, backupPath: '/fixture-backup' };
     }
   }
   class EventEmitter {
@@ -50,7 +59,7 @@ test('extension wires account tree, switch/reload choice, login task and quota r
       async executeCommand(...args) { executed.push(args); },
     },
     tasks: {
-      async executeTask(value) { task = value; return { task: value }; },
+      async executeTask(value) { task = value; taskExecution = { task: value }; return taskExecution; },
       onDidEndTaskProcess(callback) { events.taskEnd = callback; return disposable(); },
     },
     window: {
@@ -61,6 +70,7 @@ test('extension wires account tree, switch/reload choice, login task and quota r
         return { ...disposable(), visible: false, onDidChangeVisibility: () => disposable() };
       },
       async showWarningMessage() { return '只切换，稍后重载'; },
+      async showInputBox() { return undefined; },
       async showInformationMessage() {}, async showErrorMessage(message) { throw new Error(message); },
     },
   };
@@ -95,6 +105,22 @@ test('extension wires account tree, switch/reload choice, login task and quota r
     assert.equal(api.getSnapshot().selected, '1');
     assert.equal(api.getSnapshot().providerState.mode, 'official');
     assert.equal(executed.length, 0, 'later reload does not reload without choice');
+    await commands.get('cxAccounts.add')();
+    assert.equal(api.getSnapshot().accounts.length, 3, 'canceling email input creates no account');
+    await commands.get('cxAccounts.add')({ email: 'four@example.invalid', authorize: false });
+    assert.equal(api.getSnapshot().accounts.length, 4);
+    assert.equal(api.getSnapshot().selected, '1');
+    await commands.get('cxAccounts.delete')({ account: api.getSnapshot().accounts[0] });
+    assert.equal(api.getSnapshot().accounts.length, 4, 'cannot remove the current account');
+    await commands.get('cxAccounts.delete')({ account: api.getSnapshot().accounts[3] });
+    assert.equal(api.getSnapshot().accounts.length, 3);
+    await commands.get('cxAccounts.add')({ email: 'four@example.invalid' });
+    assert.deepEqual(task.execution.args, ['bridge.py', 'login', '4'], 'add opens authorization for a dynamic slot');
+    assert.equal(api.getSnapshot().selected, '1');
+    await commands.get('cxAccounts.delete')({ account: api.getSnapshot().accounts[1] });
+    assert.equal(api.getSnapshot().accounts.length, 4, 'removal is blocked during authorization');
+    events.taskEnd({ execution: taskExecution, exitCode: 1 });
+    await new Promise(setImmediate);
     await commands.get('cxAccounts.login')({ account: api.getSnapshot().accounts[1] });
     assert.deepEqual(task.execution.args, ['bridge.py', 'login', '2']);
     assert.equal(api.getSnapshot().selected, '1', 'starting login does not select its account');

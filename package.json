@@ -1,8 +1,8 @@
 {
   "name": "cx-codex-accounts",
   "displayName": "CX · Codex / Claude Code 供应商管理",
-  "description": "在同一侧栏管理 Codex 与 Claude Code 第三方供应商、API Key 和模型映射，保留 Codex 账号、额度与统一历史。",
-  "version": "0.4.0",
+  "description": "管理 Codex 动态账号、额度与统一历史，以及 Codex / Claude Code 第三方供应商、API Key 和模型映射。",
+  "version": "0.5.0",
   "publisher": "wangxin-local",
   "license": "MIT",
   "engines": {
@@ -76,7 +76,7 @@
     "commands": [
       {
         "command": "cxAccounts.refresh",
-        "title": "CX: 刷新三个账号额度",
+        "title": "CX: 刷新所有账号额度",
         "icon": "$(refresh)"
       },
       {
@@ -238,6 +238,16 @@
         "command": "cxClaude.refresh",
         "title": "CX Claude Code: 刷新供应商状态",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "cxAccounts.add",
+        "title": "CX: 添加 Codex 账号",
+        "icon": "$(add)"
+      },
+      {
+        "command": "cxAccounts.delete",
+        "title": "CX: 删除 Codex 账号（保留凭据备份）",
+        "icon": "$(trash)"
       }
     ],
     "menus": {
@@ -336,6 +346,11 @@
           "command": "cxAccounts.reload",
           "when": "view == cxClaude.providers",
           "group": "navigation@4"
+        },
+        {
+          "command": "cxAccounts.add",
+          "when": "view == cxAccounts.accounts",
+          "group": "navigation@0"
         }
       ],
       "view/item/context": [
@@ -403,6 +418,11 @@
           "command": "cxClaude.providerModels",
           "when": "view == cxClaude.providers && viewItem == cxClaudeProvider",
           "group": "1_models@1"
+        },
+        {
+          "command": "cxAccounts.delete",
+          "when": "view == cxAccounts.accounts && viewItem == cxAccount",
+          "group": "inline@3"
         }
       ]
     },
@@ -460,23 +480,12 @@
             "3": "shuiwangsanjin@gmail.com"
           },
           "additionalProperties": false,
-          "required": [
-            "1",
-            "2",
-            "3"
-          ],
-          "properties": {
-            "1": {
-              "type": "string"
-            },
-            "2": {
-              "type": "string"
-            },
-            "3": {
+          "description": "首次使用的账号编号与邮箱。首次添加/删除后以账号目录中的 accounts.json 为准，请通过侧栏管理。",
+          "patternProperties": {
+            "^[1-9][0-9]{0,5}$": {
               "type": "string"
             }
-          },
-          "description": "三个编号对应的邮箱，授权后会校验实际邮箱。"
+          }
         },
         "cxAccounts.claudeHome": {
           "type": "string",
@@ -504,13 +513,17 @@
       {
         "view": "cxClaude.providers",
         "contents": "Claude Code 第三方供应商（Anthropic Messages）。\n[添加供应商](command:cxClaude.providerAdd)\n[导入当前 Claude 配置](command:cxClaude.providerImport)\n[从 CC Switch 导入](command:cxClaude.providerImportCC)"
+      },
+      {
+        "view": "cxAccounts.accounts",
+        "contents": "添加 ChatGPT 账号并完成授权。\n[添加 Codex 账号](command:cxAccounts.add)"
       }
     ]
   },
   "scripts": {
     "test": "node --test test/*.test.js",
     "test:python": "python -m unittest discover -s test -p test_*.py -v",
-    "package": "vsce package --no-dependencies --out releases/cx-codex-accounts-0.4.0.vsix"
+    "package": "vsce package --no-dependencies --out releases/cx-codex-accounts-0.5.0.vsix"
   },
   "devDependencies": {
     "@vscode/vsce": "^3.6.0"

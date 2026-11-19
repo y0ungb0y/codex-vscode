@@ -27,7 +27,7 @@ test('client uses JSON output without exposing raw stderr and rejects invalid op
   await assert.rejects(runJson(process.execPath, ['-e', 'console.error("secret-stderr");console.log("bad-json")']),
     error => !error.message.includes('secret-stderr'));
   const client = new Client(__dirname, () => ({}));
-  await assert.rejects(client.request('select', '4'), /无效/);
+  await assert.rejects(client.request('select', '../4'), /无效/);
 });
 test('client timeout is bounded and CLI commands cannot be injected', async () => {
   await assert.rejects(runJson(process.execPath, ['-e', 'setTimeout(()=>{},10000)'], { timeout: 50 }), /超时/);

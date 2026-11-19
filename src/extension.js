@@ -135,6 +135,7 @@ function activate(context) {
     if (busy || loginTerminal) return render('CX 正在查询或授权，请完成后重试。');
     const a = await choose(argument, '授权 Codex 账号');
     if (!a) return;
+    busy = true;
     try {
       const options = await client.loginTerminalOptions(a.id);
       const task = new vscode.Task({ type: 'cx-login', account: a.id }, vscode.TaskScope.Global,
@@ -144,6 +145,44 @@ function activate(context) {
       loginTerminal = await vscode.tasks.executeTask(task);
       render(`授权终端已打开：请使用 ${a.email} 完成授权；授权不会切换当前账号。`);
     } catch (error) { vscode.window.showErrorMessage(`CX：${translateError(error.message)}`); }
+    finally { busy = false; render(); }
+  }
+  async function addAccount(argument) {
+    if (busy || loginTerminal) return render('CX 正在查询或授权，请完成后再添加账号。');
+    const email = typeof argument?.email === 'string' ? argument.email : await vscode.window.showInputBox({
+      title: `添加 Codex 账号 · ${environmentLabel}`, prompt: '输入 ChatGPT 账号邮箱，添加后将在终端发起设备码授权。',
+      placeHolder: 'name@example.com', ignoreFocusOut: true,
+      validateInput(value) {
+        const text = value.trim();
+        if (text.length > 254 || /[\x00-\x1f\x7f]/.test(text) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text)) return '请输入有效的邮箱。';
+        if (state?.accounts?.some(a => a.email.toLowerCase() === text.toLowerCase())) return '此邮箱已存在，请使用其钥匙按钮授权。';
+      },
+    });
+    if (email === undefined) return;
+    let added, message;
+    try {
+      const result = await hooks.run(() => client.accountRequest('add', { email: email.trim() }));
+      state = mergeSnapshot(state, result);
+      added = state.accounts.find(a => a.id === result.addedId);
+      message = `账号 ${result.addedId} 已添加；可点击钥匙完成授权。`;
+      output.appendLine(`${new Date().toISOString()} ${message}`);
+    } catch (error) { vscode.window.showErrorMessage(`CX：${translateError(error.message)}`); }
+    render(message);
+    if (added && argument?.authorize !== false) await authorize({ account: added });
+  }
+  async function deleteAccount(argument) {
+    if (busy || loginTerminal) return render('CX 正在查询或授权，请完成后再删除账号。');
+    const a = await choose(argument, '删除 Codex 账号（凭据移入本机备份）');
+    if (!a) return;
+    if (a.selected) return hooks.notice('请先切换到其他账号，再删除当前使用的账号。');
+    let message;
+    try {
+      const result = await hooks.run(() => client.accountRequest('delete', { id: a.id, expectedEmail: a.email }));
+      state = mergeSnapshot(state, result);
+      message = `账号 ${a.id} 已移除；原凭据已移入本机备份。`;
+      output.appendLine(`${new Date().toISOString()} ${message} ${result.backupPath}`);
+    } catch (error) { vscode.window.showErrorMessage(`CX：${translateError(error.message)}`); }
+    render(message);
   }
   function schedule() {
     clearInterval(timer);
@@ -157,7 +196,7 @@ function activate(context) {
     watchers.splice(0).forEach(w => w.dispose());
     const opts = configuration();
     const roots = [
-      [expandHome(opts.accountsRoot || path.join(os.homedir(), '.codex-accounts')), '**/{auth.json,registry.json}'],
+      [expandHome(opts.accountsRoot || path.join(os.homedir(), '.codex-accounts')), '**/{auth.json,registry.json,accounts.json}'],
       [expandHome(opts.codexHome || process.env.CODEX_HOME || path.join(os.homedir(), '.codex')), '{auth.json,config.toml}'],
     ];
     for (const [root, pattern] of roots) {
@@ -171,7 +210,7 @@ function activate(context) {
     }
   }
   const commands = {
-    refresh: () => refresh(true), switch: switchAccount, login: authorize,
+    refresh: () => refresh(true), switch: switchAccount, login: authorize, add: addAccount, delete: deleteAccount,
     reload: () => vscode.commands.executeCommand('workbench.action.reloadWindow'),
     settings: () => vscode.commands.executeCommand('workbench.action.openSettings', '@ext:wangxin-local.cx-codex-accounts'),
     openGuide: () => {

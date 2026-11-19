@@ -16,11 +16,19 @@ from quota_status import QuotaError, backend_command, child_environment, identit
 
 ROOT = pathlib.Path.home() / '.codex-accounts'
 DEFAULT = pathlib.Path.home() / '.codex/auth.json'
-EMAILS = {
+DEFAULT_EMAILS = {
     '1': 'wangxin031220@gmail.com',
     '2': 'KadynLedue381417@outlook.fr',
     '3': 'shuiwangsanjin@gmail.com',
 }
+EMAILS = dict(DEFAULT_EMAILS)
+
+
+def reload_accounts():
+    from account_registry import AccountRegistry
+    global EMAILS
+    EMAILS = AccountRegistry(ROOT, EMAILS).emails()
+    return EMAILS
 
 
 def replace_file(source, destination):
@@ -81,8 +89,9 @@ def backup(path, directory):
 
 
 def login(number):
+    reload_accounts()
     if number not in EMAILS:
-        raise ValueError('Choose account 1, 2, or 3.')
+        raise ValueError('请选择账号列表中的有效编号。')
     ROOT.mkdir(parents=True, exist_ok=True)
     selected = save_current()
     print('Authorize account ' + number + ': ' + EMAILS[number], flush=True)
@@ -105,6 +114,9 @@ def login(number):
         auth = identity(staging)
         if completed.returncode != 0 or auth is None:
             raise ValueError('Login did not complete. Retry: cx-login ' + number)
+        reload_accounts()
+        if number not in EMAILS:
+            raise ValueError('账号已从列表移除；此次授权未保存。')
         if slot(auth) != number:
             raise ValueError('Browser signed in as ' + str(auth.get('email'))
                              + '; expected ' + EMAILS[number]
@@ -124,23 +136,24 @@ def login(number):
         if active == number and DEFAULT.resolve() != target.resolve():
             replace_file(target, DEFAULT)
     print('Account ' + number + ' authorized: ' + EMAILS[number])
-    print('Plugin account selection preserved. Run cx status to check quota.')
+    print('Plugin account selection preserved. Refresh the CX sidebar to check quota.')
     if active == number:
         print('Reload VS Code: Ctrl+Shift+P -> Developer: Reload Window')
     else:
-        print('To select this account later: cx ' + number + ', then reload VS Code.')
+        print('To select this account later: choose account ' + number + ' in the CX sidebar, then reload VS Code.')
 
 
 def main():
+    reload_accounts()
     args = sys.argv[1:]
     if args in (['--help'], ['-h']):
-        print('Usage: cx-login <1|2|3>')
+        print('Usage: cx-login <account-number>')
         for number, email in EMAILS.items():
             print('  cx-login ' + number + '  ' + email)
         print('Complete the device-code flow in your local browser. No plugin account switch.')
         return 0
     if len(args) != 1 or args[0] not in EMAILS:
-        print('Usage: cx-login <1|2|3>', file=sys.stderr)
+        print('Usage: cx-login <account-number>', file=sys.stderr)
         return 2
     login(args[0])
     return 0
