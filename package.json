@@ -2,7 +2,7 @@
   "name": "cx-codex-accounts",
   "displayName": "CX · Codex / Claude Code 供应商管理",
   "description": "管理 Codex 动态账号、额度与统一历史，以及 Codex / Claude Code 第三方供应商、API Key 和模型映射。",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "publisher": "wangxin-local",
   "license": "MIT",
   "engines": {
@@ -78,6 +78,11 @@
         "command": "cxAccounts.refresh",
         "title": "CX: 刷新所有账号额度",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "cxAccounts.catalogRefresh",
+        "title": "CX: 刷新 Codex 官方模型目录",
+        "icon": "$(list-selection)"
       },
       {
         "command": "cxAccounts.switch",
@@ -261,6 +266,11 @@
           "command": "cxAccounts.refresh",
           "when": "view == cxAccounts.accounts",
           "group": "navigation@1"
+        },
+        {
+          "command": "cxAccounts.catalogRefresh",
+          "when": "view == cxAccounts.accounts",
+          "group": "navigation@2"
         },
         {
           "command": "cxAccounts.reload",
@@ -523,7 +533,7 @@
   "scripts": {
     "test": "node --test test/*.test.js",
     "test:python": "python -m unittest discover -s test -p test_*.py -v",
-    "package": "vsce package --no-dependencies --out releases/cx-codex-accounts-0.5.1.vsix"
+    "package": "vsce package --no-dependencies --out releases/cx-codex-accounts-0.5.2.vsix"
   },
   "devDependencies": {
     "@vscode/vsce": "^3.6.0"

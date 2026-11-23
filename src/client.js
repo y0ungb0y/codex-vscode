@@ -111,6 +111,11 @@ class Client {
     return runJson(python[0], [...python.slice(1), this.bridge, `provider-${operation}`],
       { env: this.environment(), input: payload, timeout: operation === 'models' ? 25000 : 15000 });
   }
+  async catalogRefresh() {
+    const python = await this.interpreter();
+    return runJson(python[0], [...python.slice(1), this.bridge, 'catalog-refresh'],
+      { env: this.environment(), timeout: 35000 });
+  }
   async accountRequest(operation, payload = {}) {
     if (!['add', 'delete'].includes(operation)) throw new Error('无效的账号管理操作。');
     const python = await this.interpreter();

@@ -211,6 +211,10 @@ function activate(context) {
   }
   const commands = {
     refresh: () => refresh(true), switch: switchAccount, login: authorize, add: addAccount, delete: deleteAccount,
+    catalogRefresh: async () => {
+      const result = await hooks.run(() => client.catalogRefresh());
+      hooks.notice(`Codex 官方模型目录已刷新：${result.count} 个模型（${result.source}）。`);
+    },
     reload: () => vscode.commands.executeCommand('workbench.action.reloadWindow'),
     settings: () => vscode.commands.executeCommand('workbench.action.openSettings', '@ext:wangxin-local.cx-codex-accounts'),
     openGuide: () => {

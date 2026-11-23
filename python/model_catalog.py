@@ -1,8 +1,10 @@
 """Public model discovery and version-compatible local Codex catalogs."""
 import copy
 import json
+import os
 import pathlib
 import re
+import tempfile
 import urllib.error
 import urllib.request
 import quota_status as quota
@@ -30,6 +32,140 @@ def load_entries(path):
         document = json.loads(pathlib.Path(path).expanduser().read_text(encoding='utf-8-sig'))
         return [e for e in document.get('models', []) if isinstance(e, dict) and valid_model(e.get('slug'))]
     except (OSError, ValueError, TypeError): return []
+
+
+# Keep the official catalog small and free of prompt/account data from the
+# native models cache.  These fields are enough for Codex's model picker and
+# reasoning selector, while deliberately excluding model_messages and other
+# runtime-only fields.
+CATALOG_FIELDS = (
+    'slug', 'display_name', 'description', 'base_instructions',
+    'supported_reasoning_levels', 'default_reasoning_level', 'shell_type',
+    'visibility', 'supported_in_api', 'priority', 'additional_speed_tiers',
+    'service_tiers', 'default_service_tier', 'support_verbosity',
+    'default_verbosity', 'supports_reasoning_summaries', 'input_modalities',
+    'context_window', 'max_context_window', 'effective_context_window_percent',
+    'truncation_policy', 'experimental_supported_tools',
+    'supports_image_detail_original', 'supports_search_tool',
+    'supports_parallel_tool_calls', 'prefer_websockets', 'upgrade',
+    'auto_compact_token_limit',
+)
+
+
+def _document(path):
+    try:
+        value = json.loads(pathlib.Path(path).expanduser().read_text(encoding='utf-8-sig'))
+        return value if isinstance(value, dict) else {}
+    except (OSError, ValueError, TypeError):
+        return {}
+
+
+def _safe_entry(value):
+    if not isinstance(value, dict):
+        return None
+    slug = value.get('slug') or value.get('id') or value.get('model')
+    if not valid_model(slug):
+        return None
+    entry = {key: copy.deepcopy(value[key]) for key in CATALOG_FIELDS if key in value}
+    entry['slug'] = slug
+    entry.setdefault('display_name', slug)
+    entry.setdefault('visibility', 'list')
+    entry.setdefault('supported_in_api', True)
+    return entry
+
+
+def _cache_entries(home):
+    result = {}
+    for path in (pathlib.Path(home) / 'models_cache.json',):
+        document = _document(path)
+        for item in document.get('models', []):
+            entry = _safe_entry(item)
+            if entry and entry.get('visibility', 'list') == 'list' and entry.get('supported_in_api', True):
+                result[entry['slug']] = entry
+    return result
+
+
+def _rpc_entry(item):
+    if not isinstance(item, dict):
+        return None
+    value = {
+        'slug': item.get('id') or item.get('model'),
+        'display_name': item.get('displayName'),
+        'description': item.get('description'),
+        'default_reasoning_level': item.get('defaultReasoningEffort'),
+        'input_modalities': item.get('inputModalities'),
+        'visibility': 'hide' if item.get('hidden') else 'list',
+        'supported_in_api': True,
+        'additional_speed_tiers': item.get('additionalSpeedTiers'),
+        'service_tiers': item.get('serviceTiers'),
+    }
+    efforts = item.get('supportedReasoningEfforts')
+    if isinstance(efforts, list):
+        value['supported_reasoning_levels'] = [
+            {'effort': e.get('reasoningEffort'), 'description': e.get('description', '')}
+            for e in efforts if isinstance(e, dict) and valid_model(e.get('reasoningEffort'))
+        ]
+    return _safe_entry(value)
+
+
+def refresh_official(codex_home):
+    """Refresh the local official Codex model directory from app-server.
+
+    ``model/list`` is the supported app-server discovery API.  The native
+    cache is used to retain richer picker metadata and as a graceful offline
+    fallback.  Existing entries are retained so an account/backend rollout
+    cannot make a previously configured model disappear unexpectedly.
+    """
+    home = pathlib.Path(codex_home).expanduser()
+    target = home / 'cc-switch-model-catalog.json'
+    existing = {}
+    for item in load_entries(target):
+        entry = _safe_entry(item)
+        if entry and entry.get('visibility', 'list') == 'list' and entry.get('supported_in_api', True):
+            existing[entry['slug']] = entry
+    cached = _cache_entries(home)
+    discovered = {}
+    source = []
+    try:
+        from rpc import AppServer
+        with AppServer(home, overrides={'model_provider': 'openai'}, timeout=25) as app:
+            result = app.call('model/list', {})
+        for item in result.get('data', []):
+            entry = _rpc_entry(item)
+            if entry and entry.get('visibility') == 'list':
+                discovered[entry['slug']] = entry
+        if discovered:
+            source.append('model/list')
+    except Exception:
+        # Offline or an older backend is still useful when its cache exists.
+        pass
+    merged = {}
+    for entries in (existing, cached, discovered):
+        for slug, entry in entries.items():
+            merged[slug] = {**merged.get(slug, {}), **copy.deepcopy(entry)}
+    if not merged:
+        raise ValueError('Codex 模型目录为空；请先登录官方账号并重试。')
+    # Stable ordering follows the backend/cache order where possible, then
+    # keeps any older manually-added entries at the end.
+    order = list(discovered) + [slug for slug in cached if slug not in discovered] + [
+        slug for slug in existing if slug not in discovered and slug not in cached]
+    entries = [merged[slug] for slug in dict.fromkeys(order)]
+    target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    payload = json.dumps({'models': entries}, ensure_ascii=False, indent=2).encode('utf-8')
+    fd, temporary = tempfile.mkstemp(prefix='.cx-model-catalog-', dir=str(target.parent))
+    try:
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, target)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+    return {'ok': True, 'path': str(target), 'count': len(entries),
+            'models': [entry['slug'] for entry in entries],
+            'source': '+'.join(source) if source else 'models_cache',
+            'notice': '官方 Codex 模型目录已刷新；目录是可用性提示，最终权限仍以实际请求为准。'}
 
 
 def generic_entry(number):

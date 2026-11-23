@@ -72,6 +72,38 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(catalog['models'][0]['context_window'], 333000)
         self.assertNotIn('stale-model', json.dumps(catalog))
 
+    def test_official_catalog_refresh_merges_native_list_and_cache_without_runtime_prompts(self):
+        home = self.base / 'codex-home'
+        home.mkdir()
+        (home / 'cc-switch-model-catalog.json').write_text(json.dumps({
+            'models': [{'slug': 'existing-model', 'display_name': 'Existing'}]}), encoding='utf-8')
+        (home / 'models_cache.json').write_text(json.dumps({'models': [
+            {'slug': 'cached-model', 'display_name': 'Cached', 'context_window': 123456,
+             'visibility': 'list', 'supported_in_api': True,
+             'model_messages': {'persistent_instructions': 'secret prompt'}},
+            {'slug': 'hidden-model', 'visibility': 'hide', 'supported_in_api': True},
+        ]}), encoding='utf-8')
+        class FakeServer:
+            def __init__(self, *args, **kwargs): pass
+            def __enter__(self): return self
+            def __exit__(self, *args): pass
+            def call(self, method, params):
+                self.method = method
+                return {'data': [
+                    {'id': 'native-model', 'displayName': 'Native', 'hidden': False,
+                     'supportedReasoningEfforts': [{'reasoningEffort': 'medium', 'description': 'balanced'}]},
+                    {'id': 'native-hidden', 'hidden': True},
+                ]}
+        import rpc
+        with mock.patch.object(rpc, 'AppServer', FakeServer):
+            result = model_catalog.refresh_official(home)
+        document = json.loads((home / 'cc-switch-model-catalog.json').read_text(encoding='utf-8'))
+        slugs = [item['slug'] for item in document['models']]
+        self.assertEqual(slugs, ['native-model', 'cached-model', 'existing-model'])
+        self.assertEqual(result['count'], 3)
+        self.assertNotIn('hidden-model', json.dumps(document))
+        self.assertNotIn('secret prompt', json.dumps(document))
+
 
 class HistoryTests(unittest.TestCase):
     def server(self, handler):

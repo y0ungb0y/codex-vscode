@@ -236,3 +236,9 @@ npm run package
 
 - [Codex 应用服务器协议](https://learn.chatgpt.com/docs/app-server)
 - [VS Code 远程扩展开发说明](https://code.visualstudio.com/api/advanced-topics/remote-extensions)
+
+## Codex 官方模型目录刷新
+
+如果 Codex 的模型菜单没有显示最新模型，在 CX 侧栏的 **Codex 账号**视图点击列表图标，或从命令面板运行 **CX: 刷新 Codex 官方模型目录**。插件会通过本机 Codex app-server 的 `model/list` 读取当前目录，并结合本地 `models_cache.json` 补全模型元数据，写入 `~/.codex/cc-switch-model-catalog.json`。
+
+刷新只更新模型目录，不会切换账号、不发送推理请求，也不会把账号凭据写入目录。模型目录是可用性提示，最终权限仍以实际请求为准。

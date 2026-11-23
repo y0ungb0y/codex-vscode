@@ -188,12 +188,12 @@ def main():
             else: result = store.test_connection(payload)
             print(json.dumps(result, ensure_ascii=True))
         return
-    operations = ('snapshot', 'status', 'select', 'login', 'account-add', 'account-delete', 'provider-save', 'provider-select', 'provider-delete', 'provider-restore', 'provider-import', 'provider-models', 'history-list', 'history-read', 'history-fork')
+    operations = ('snapshot', 'status', 'select', 'login', 'account-add', 'account-delete', 'catalog-refresh', 'provider-save', 'provider-select', 'provider-delete', 'provider-restore', 'provider-import', 'provider-models', 'history-list', 'history-read', 'history-fork')
     if not args or args[0] not in operations:
         raise ValueError('Unsupported operation')
     if args[0] in ('select', 'login') and (len(args) != 2 or args[1] not in login.EMAILS):
         raise ValueError('请选择账号列表中的有效编号。')
-    if args[0] in ('snapshot', 'status') and len(args) != 1:
+    if args[0] in ('snapshot', 'status', 'catalog-refresh') and len(args) != 1:
         raise ValueError('Unsupported arguments')
     with OperationLock():
         # Re-read under the cross-window lock; a competing window may have changed accounts.
@@ -238,6 +238,10 @@ def main():
             elif args[0] == 'provider-import': result = store.import_current()
             elif args[0] == 'provider-models': result = model_catalog.discover(store, payload)
             else: result = store.restore(force=True)
+            print(json.dumps(result, ensure_ascii=True))
+            return
+        if args[0] == 'catalog-refresh':
+            result = model_catalog.refresh_official(login.DEFAULT.parent)
             print(json.dumps(result, ensure_ascii=True))
             return
         if args[0] == 'login':
