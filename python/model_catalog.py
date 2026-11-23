@@ -149,8 +149,10 @@ def refresh_official(codex_home):
 
     ``model/list`` is the supported app-server discovery API.  The native
     cache is used to retain richer picker metadata and as a graceful offline
-    fallback.  Existing entries are retained so an account/backend rollout
-    cannot make a previously configured model disappear unexpectedly.
+    fallback.  The active account's discovery result is authoritative: stale
+    entries from an older account or an older catalog must not remain
+    selectable, because the ChatGPT backend rejects models outside the
+    account's entitlement.
     """
     home = pathlib.Path(codex_home).expanduser()
     target = home / 'cc-switch-model-catalog.json'
@@ -165,8 +167,17 @@ def refresh_official(codex_home):
     source = []
     try:
         from rpc import AppServer
-        with AppServer(home, overrides={'model_provider': 'openai'}, timeout=25) as app:
-            result = app.call('model/list', {})
+        # Query a clean official config. If the current config points at the
+        # CX catalog, app-server would otherwise return that stale catalog.
+        with tempfile.TemporaryDirectory(prefix='.cx-official-discovery-') as temporary:
+            discovery_home = pathlib.Path(temporary)
+            for name in ('auth.json', 'installation_id'):
+                source_path = home / name
+                if source_path.is_file():
+                    discovery_home.joinpath(name).write_bytes(source_path.read_bytes())
+            (discovery_home / 'config.toml').write_text('model_provider = "openai"\n', encoding='utf-8')
+            with AppServer(discovery_home, overrides={'model_provider': 'openai'}, timeout=25) as app:
+                result = app.call('model/list', {})
         for item in result.get('data', []):
             entry = _rpc_entry(item)
             if entry and entry.get('visibility') == 'list':
@@ -176,15 +187,24 @@ def refresh_official(codex_home):
     except Exception:
         # Offline or an older backend is still useful when its cache exists.
         pass
-    # The native app-server validates the full catalog schema.  Start from a
-    # native cache entry for every model, then overlay the discovered/display
-    # fields.  This keeps the catalog usable by the official VS Code plugin
-    # instead of producing a lightweight third-party-only catalog.
+    # The native app-server validates the full catalog schema. Start from a
+    # native cache entry for every model, then overlay discovered/display
+    # fields. Once discovery succeeds, do not append old catalog entries.
+    # This prevents a model such as gpt-6.2-sol from surviving after the
+    # account/backend stops supporting it.
     template = next(iter(raw_cached.values()), None)
     merged = {}
-    for slug in dict.fromkeys(list(raw_cached) + list(discovered) + list(cached) + list(existing)):
+    if discovered:
+        allowed = list(discovered)
+    elif raw_cached:
+        allowed = list(raw_cached)
+    elif cached:
+        allowed = list(cached)
+    else:
+        allowed = list(existing)
+    for slug in allowed:
         entry = copy.deepcopy(raw_cached.get(slug) or template or {})
-        for source_entries in (existing, cached, discovered):
+        for source_entries in (cached, discovered):
             if slug in source_entries:
                 entry.update(copy.deepcopy(source_entries[slug]))
         entry['slug'] = slug
@@ -194,12 +214,7 @@ def refresh_official(codex_home):
         merged[slug] = entry
     if not merged:
         raise ValueError('Codex 模型目录为空；请先登录官方账号并重试。')
-    # Stable ordering follows the backend/cache order where possible, then
-    # keeps any older manually-added entries at the end.
-    order = list(discovered) + [slug for slug in raw_cached if slug not in discovered] + [
-        slug for slug in cached if slug not in discovered and slug not in raw_cached] + [
-        slug for slug in existing if slug not in discovered and slug not in cached and slug not in raw_cached]
-    entries = [merged[slug] for slug in dict.fromkeys(order)]
+    entries = [merged[slug] for slug in allowed]
     target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     payload = json.dumps({'models': entries}, ensure_ascii=False, indent=2).encode('utf-8')
     fd, temporary = tempfile.mkstemp(prefix='.cx-model-catalog-', dir=str(target.parent))
@@ -220,19 +235,43 @@ def refresh_official(codex_home):
             'notice': '官方 Codex 模型目录已刷新；目录是可用性提示，最终权限仍以实际请求为准。'}
 
 
+def _reasoning_defaults(number):
+    """Return effort choices for a third-party model."""
+    if 'deepseek' in number.lower():
+        return ([{'effort': 'low', 'description': 'Less reasoning, faster response'},
+                 {'effort': 'high', 'description': 'More reasoning, slower response'}], 'low')
+    return ([{'effort': 'low', 'description': 'Less reasoning, faster response'},
+             {'effort': 'medium', 'description': 'Balanced speed and reasoning depth'},
+             {'effort': 'high', 'description': 'More reasoning, slower response'}], 'medium')
+
+
+def _ensure_reasoning_levels(entry, number):
+    levels = entry.get('supported_reasoning_levels')
+    if isinstance(levels, list) and levels:
+        valid = [item for item in levels if isinstance(item, dict) and valid_model(item.get('effort'))]
+        if valid:
+            entry['supported_reasoning_levels'] = valid
+            entry.setdefault('default_reasoning_level', valid[0]['effort'])
+            return entry
+    defaults, default = _reasoning_defaults(number)
+    entry['supported_reasoning_levels'] = defaults
+    entry['default_reasoning_level'] = default
+    return entry
+
+
 def generic_entry(number):
-    deepseek = 'deepseek' in number.lower()
-    return {'slug': number, 'display_name': number, 'description': '第三方供应商模型',
+    levels, default = _reasoning_defaults(number)
+    return {'slug': number, 'display_name': number, 'description': 'Third-party provider model',
             'base_instructions': 'Help the user with coding tasks. Inspect the workspace, use available tools carefully, and verify changes.',
-            'supported_reasoning_levels': [{'effort': 'low', 'description': '较少推理'}, {'effort': 'high', 'description': '较多推理'}] if deepseek else [],
-            'default_reasoning_level': 'low' if deepseek else None,
+            'supported_reasoning_levels': levels,
+            'default_reasoning_level': default,
             'shell_type': 'shell_command', 'visibility': 'list', 'supported_in_api': True, 'priority': 0,
             'support_verbosity': False, 'supports_reasoning_summaries': False,
             'supports_parallel_tool_calls': False, 'prefer_websockets': False,
             'input_modalities': ['text'], 'context_window': 131072,
             'effective_context_window_percent': 90,
             'truncation_policy': {'mode': 'tokens', 'limit': 10000}, 'experimental_supported_tools': [],
-            **({'apply_patch_tool_type': 'freeform'} if deepseek else {})}
+            **({'apply_patch_tool_type': 'freeform'} if 'deepseek' in number.lower() else {})}
 
 
 def build_catalog(record):
@@ -240,6 +279,7 @@ def build_catalog(record):
     entries = []
     for number in model_ids(record.get('models'), record['model']):
         entry = copy.deepcopy(existing.get(number) or generic_entry(number))
+        _ensure_reasoning_levels(entry, number)
         # The selected IDs, not a stale provider-wide source catalog, define the picker.
         entry.update({'slug': number, 'visibility': 'list', 'supported_in_api': True})
         entries.append(entry)

@@ -1,4 +1,10 @@
 
+## 0.5.3
+
+- Refreshing the official catalog now treats the current account's app-server `model/list` result as authoritative, so stale models such as `gpt-6.2-sol` are removed.
+- Returning to ChatGPT authentication drops a selected model that is absent from the refreshed official catalog.
+- Third-party model catalogs expose low, medium, and high reasoning choices by default; DeepSeek keeps low/high and explicit provider metadata is preserved.
+
 ## 0.5.2
 
 - 新增“刷新 Codex 官方模型目录”命令。

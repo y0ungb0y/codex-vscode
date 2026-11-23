@@ -13,7 +13,7 @@ import uuid
 sys.path.insert(0, str(pathlib.Path(__file__).parent / 'vendor'))
 import tomlkit
 from provider_key import atomic_write, check_id, encode_key, read_key
-from model_catalog import build_catalog, model_ids, discover
+from model_catalog import build_catalog, model_ids, discover, load_entries
 
 OLD_FIELDS = ('model_provider', 'model', 'review_model', 'model_catalog_json',
           'forced_login_method', 'forced_chatgpt_workspace_id')
@@ -324,6 +324,12 @@ class Providers:
         official_catalog = self.config.parent / 'cc-switch-model-catalog.json'
         if official_catalog.is_file():
             doc['model_catalog_json'] = str(official_catalog.resolve())
+            # A catalog can outlive an account entitlement. Do not leave a
+            # stale model selected when returning to ChatGPT authentication;
+            # the official backend rejects it before a session can start.
+            available = {entry['slug'] for entry in load_entries(official_catalog)}
+            if available and str(doc.get('model', '')) not in available:
+                doc.pop('model', None)
         # Registry/secrets and external dormant definitions remain available.
         content = tomlkit.dumps(doc).encode('utf-8')
         changes = self.backup_changes(raw) if content != raw or state else {}

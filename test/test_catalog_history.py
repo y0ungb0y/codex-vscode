@@ -29,6 +29,8 @@ class CatalogTests(unittest.TestCase):
         catalog = json.loads(pathlib.Path(doc['model_catalog_json']).read_text(encoding='utf-8'))
         self.assertEqual([e['slug'] for e in catalog['models']], ['deepseek-v4.1-flash-1017', 'qwen3-test', 'glm-test'])
         self.assertEqual(doc['model_reasoning_effort'], 'low')
+        self.assertEqual([item['effort'] for item in catalog['models'][1]['supported_reasoning_levels']],
+                         ['low', 'medium', 'high'])
         self.assertEqual(doc['web_search'], 'disabled')
         self.assertNotIn('service_tier', doc)
         self.assertFalse(catalog['models'][0]['prefer_websockets'])
@@ -100,8 +102,8 @@ class CatalogTests(unittest.TestCase):
             result = model_catalog.refresh_official(home)
         document = json.loads((home / 'cc-switch-model-catalog.json').read_text(encoding='utf-8'))
         slugs = [item['slug'] for item in document['models']]
-        self.assertEqual(slugs, ['native-model', 'cached-model', 'existing-model'])
-        self.assertEqual(result['count'], 3)
+        self.assertEqual(slugs, ['native-model'])
+        self.assertEqual(result['count'], 1)
         self.assertTrue(result['configured'])
         self.assertIn('model_catalog_json', (home / 'config.toml').read_text(encoding='utf-8'))
         self.assertNotIn('hidden-model', json.dumps(document))

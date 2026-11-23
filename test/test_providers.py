@@ -230,6 +230,20 @@ class ProviderTests(unittest.TestCase):
         self.assertEqual(doc['mcp_servers']['test']['command'], 'keep-this')
         self.assertTrue(any(p.read_text(encoding='utf-8') == raw for p in (self.store.root / 'config-backups').glob('*.toml')))
 
+    def test_official_return_drops_model_missing_from_refreshed_catalog(self):
+        catalog = self.store.config.parent / 'cc-switch-model-catalog.json'
+        catalog.write_text(json.dumps({'models': [{'slug': 'gpt-6.1-sol'}]}), encoding='utf-8')
+        self.store.config.write_text(
+            'model_provider = "custom"\nmodel = "gpt-6.2-sol"\n'
+            'model_catalog_json = ' + json.dumps(str(catalog)) + '\n'
+            '[model_providers.custom]\nbase_url = "https://gateway.example.invalid/v1"\n',
+            encoding='utf-8')
+        result = self.store.restore(official=True)
+        self.assertEqual(result['mode'], 'official')
+        _, doc = self.store.document()
+        self.assertNotIn('model', doc)
+        self.assertEqual(doc['model_provider'], 'openai')
+
     def test_bridge_selects_official_account_after_external_api_mode_without_state(self):
         raw = ('model_provider = "external"\nmodel = "third-party-only"\nforced_login_method = "api"\n'
                '[model_providers.external]\nbase_url = "https://gateway.example.invalid/v1"\nwire_api = "responses"\n')
