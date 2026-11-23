@@ -112,9 +112,13 @@ def _configure_official_catalog(home, target):
         if str(document.get('model_provider', 'openai')) != 'openai':
             return False
         value = str(target.resolve())
-        if document.get('model_catalog_json') == value:
+        if (document.get('model_catalog_json') == value
+                and document.get('cli_auth_credentials_store') == 'file'):
             return False
         document['model_catalog_json'] = value
+        # CX switches auth.json files. Auto/keyring storage can resolve a
+        # different account (or no account), even with the correct catalog.
+        document['cli_auth_credentials_store'] = 'file'
         atomic_write(config, tomlkit.dumps(document).encode('utf-8'))
         return True
     except (OSError, ValueError, TypeError, UnicodeError):
@@ -175,8 +179,14 @@ def refresh_official(codex_home):
                 source_path = home / name
                 if source_path.is_file():
                     discovery_home.joinpath(name).write_bytes(source_path.read_bytes())
-            (discovery_home / 'config.toml').write_text('model_provider = "openai"\n', encoding='utf-8')
+            (discovery_home / 'config.toml').write_text(
+                'model_provider = "openai"\ncli_auth_credentials_store = "file"\n', encoding='utf-8')
             with AppServer(discovery_home, overrides={'model_provider': 'openai'}, timeout=25) as app:
+                account = app.call('account/read', {'refreshToken': False}).get('account') or {}
+                expected = quota.identity(home)
+                if (account.get('type') != 'chatgpt' or (expected and
+                        (account.get('email') or '').lower() != (expected.get('email') or '').lower())):
+                    raise ValueError('Official model discovery did not load the selected ChatGPT account')
                 result = app.call('model/list', {})
         for item in result.get('data', []):
             entry = _rpc_entry(item)

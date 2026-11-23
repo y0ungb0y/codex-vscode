@@ -239,6 +239,10 @@ npm run package
 
 ## Codex 官方模型目录刷新
 
+0.5.4 修复了 CX 文件账号与系统凭据存储不一致的问题。选择官方账号、刷新官方目录时，均明确使用 `cli_auth_credentials_store = "file"` 读取 CX 切换的 `auth.json`。刷新先确认当前 ChatGPT 身份，再获取模型列表，避免未登录状态下的默认列表被误认为账号没有新模型权限。
+
+GPT-6.2 Sol / Astra 可通过支持它们的 Codex 官方客户端和账号调用。本机账号 3 已分别完成两个模型的最小回复验证；升级 CX 后执行 **Developer: Reload Window**，再在 Codex 模型菜单选择。目录本身不授予模型权限。
+
 如果 Codex 的模型菜单没有显示最新模型，在 CX 侧栏的 **Codex 账号**视图点击列表图标，或从命令面板运行 **CX: 刷新 Codex 官方模型目录**。插件会通过本机 Codex app-server 的 `model/list` 读取当前目录，并结合本地 `models_cache.json` 补全模型元数据，写入 `~/.codex/cc-switch-model-catalog.json`。
 
 刷新只更新模型目录，不会切换账号、不发送推理请求，也不会把账号凭据写入目录。模型目录是可用性提示，最终权限仍以实际请求为准。

@@ -57,6 +57,7 @@ class ProviderTests(unittest.TestCase):
         text = self.store.config.read_text()
         self.assertIn('model = "official-model"', text)
         self.assertIn('forced_login_method = "chatgpt"', text)
+        self.assertIn('cli_auth_credentials_store = "file"', text)
         self.assertIn('# retained', text)
         self.assertNotIn('cx_', text)
         self.assertEqual((self.base / 'accounts/3/auth.json').read_bytes(), before_auth)

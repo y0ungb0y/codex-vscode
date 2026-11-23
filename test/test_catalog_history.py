@@ -87,11 +87,16 @@ class CatalogTests(unittest.TestCase):
             {'slug': 'hidden-model', 'visibility': 'hide', 'supported_in_api': True},
         ]}), encoding='utf-8')
         class FakeServer:
-            def __init__(self, *args, **kwargs): pass
+            def __init__(inner, home, **kwargs):
+                config = (home / 'config.toml').read_text(encoding='utf-8')
+                self.assertIn('cli_auth_credentials_store = "file"', config)
+                self.assertNotIn('model_catalog_json', config)
             def __enter__(self): return self
             def __exit__(self, *args): pass
             def call(self, method, params):
                 self.method = method
+                if method == 'account/read':
+                    return {'account': {'type': 'chatgpt', 'email': 'fixture@example.invalid'}}
                 return {'data': [
                     {'id': 'native-model', 'displayName': 'Native', 'hidden': False,
                      'supportedReasoningEfforts': [{'reasoningEffort': 'medium', 'description': 'balanced'}]},
@@ -106,6 +111,7 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(result['count'], 1)
         self.assertTrue(result['configured'])
         self.assertIn('model_catalog_json', (home / 'config.toml').read_text(encoding='utf-8'))
+        self.assertIn('cli_auth_credentials_store = "file"', (home / 'config.toml').read_text(encoding='utf-8'))
         self.assertNotIn('hidden-model', json.dumps(document))
         self.assertNotIn('api_key', json.dumps(document).lower())
 

@@ -1,4 +1,10 @@
 
+## 0.5.4
+
+- 修复官方账号和目录查询没有明确使用文件凭据，导致已授权账号仍返回旧模型列表的问题。
+- 切回官方账号固定从 CX 切换的 `auth.json` 读取凭据；目录查询先校验 ChatGPT 身份。
+- 本机账号 3 已实测 `gpt-6.2-sol`、`gpt-6.2-astra` 均成功返回回复。
+
 ## 0.5.3
 
 - Refreshing the official catalog now treats the current account's app-server `model/list` result as authoritative, so stale models such as `gpt-6.2-sol` are removed.

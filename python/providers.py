@@ -303,6 +303,9 @@ class Providers:
                     doc[field] = copy.deepcopy(baseline[field])
         doc['model_provider'] = 'openai'
         doc['forced_login_method'] = 'chatgpt'
+        # Account selection replaces auth.json; do not let auto/keyring
+        # credentials silently override the account selected in CX.
+        doc['cli_auth_credentials_store'] = 'file'
         # A previous account's forced workspace can reject a valid new login.
         if 'forced_chatgpt_workspace_id' in doc:
             del doc['forced_chatgpt_workspace_id']
