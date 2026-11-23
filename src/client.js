@@ -106,7 +106,7 @@ class Client {
     };
   }
   async providerRequest(operation, payload = {}) {
-    if (!['save', 'select', 'delete', 'restore', 'import', 'models'].includes(operation)) throw new Error('无效的供应商操作。');
+    if (!['save', 'select', 'delete', 'restore', 'import', 'models', 'reasoning'].includes(operation)) throw new Error('无效的供应商操作。');
     const python = await this.interpreter();
     return runJson(python[0], [...python.slice(1), this.bridge, `provider-${operation}`],
       { env: this.environment(), input: payload, timeout: operation === 'models' ? 25000 : 15000 });

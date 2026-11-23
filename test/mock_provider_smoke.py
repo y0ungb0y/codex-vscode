@@ -32,7 +32,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         size = int(self.headers.get('Content-Length', '0'))
         body = json.loads(self.rfile.read(size))
         seen.append({'path': self.path, 'authorized': self.headers.get('Authorization') == 'Bearer cx-fixture-only',
-                     'model': body.get('model')})
+                     'model': body.get('model'), 'effort': (body.get('reasoning') or {}).get('effort')})
         message = {'id': 'msg_fixture', 'type': 'message', 'role': 'assistant', 'status': 'completed',
                    'content': [{'type': 'output_text', 'text': 'CX_MOCK_OK', 'annotations': []}]}
         response = {'id': 'resp_fixture', 'object': 'response', 'created_at': 1794360000, 'status': 'completed',
@@ -68,9 +68,11 @@ def main():
         saved = store.save({'name': 'CX local fixture', 'baseUrl': 'http://127.0.0.1:' + str(server.server_port) + '/v1',
                             'model': 'cx-fixture-model', 'apiKey': 'cx-fixture-only'})
         store.activate(saved['savedId'])
+        store.reasoning(saved['savedId'], 'high', 'cx-fixture-model')
         with AppServer(home) as app:
             listed = app.call('model/list', {'includeHidden': True}).get('data', [])
-            assert any(m.get('model') == 'cx-fixture-model' or m.get('id') == 'cx-fixture-model' for m in listed), 'Custom model is missing from Codex model/list'
+            model = next((m for m in listed if m.get('model') == 'cx-fixture-model' or m.get('id') == 'cx-fixture-model'), None)
+            assert model and model.get('defaultReasoningEffort') == 'high', 'Codex model/list did not pick up the saved reasoning level'
         env = os.environ.copy()
         env['CODEX_HOME'] = str(home)
         env['NO_PROXY'] = env['no_proxy'] = '127.0.0.1,localhost'
@@ -95,6 +97,7 @@ def main():
         assert seen and seen[-1]['authorized'], 'Codex did not use the configured credential helper'
         assert seen[-1]['path'].split('?')[0] == '/v1/responses'
         assert seen[-1]['model'] == 'cx-fixture-model'
+        assert seen[-1]['effort'] == 'high', 'Saved reasoning level did not reach the provider'
         assert b'CX_MOCK_OK' in result.stdout
         original = history.list_threads(home, {})['threads'][0]
         second = store.save({'name': 'Second fixture', 'baseUrl': 'http://127.0.0.1:' + str(server.server_port) + '/v1',
@@ -107,7 +110,7 @@ def main():
         # Some backends list a new fork only after its first new user turn.
         fork_read = history.read_thread(home, {'id': forked['id']})
         assert fork_read['messages'], 'Native fork did not preserve visible messages'
-        print('PASS: native model/list, credential helper, Responses reply, all-provider history and cross-provider fork')
+        print('PASS: native model/list, credential helper, Responses reasoning.effort=high, reply, history and fork')
 
 
 if __name__ == '__main__': main()

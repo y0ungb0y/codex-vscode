@@ -188,7 +188,7 @@ def main():
             else: result = store.test_connection(payload)
             print(json.dumps(result, ensure_ascii=True))
         return
-    operations = ('snapshot', 'status', 'select', 'login', 'account-add', 'account-delete', 'catalog-refresh', 'provider-save', 'provider-select', 'provider-delete', 'provider-restore', 'provider-import', 'provider-models', 'history-list', 'history-read', 'history-fork')
+    operations = ('snapshot', 'status', 'select', 'login', 'account-add', 'account-delete', 'catalog-refresh', 'provider-save', 'provider-select', 'provider-delete', 'provider-restore', 'provider-import', 'provider-models', 'provider-reasoning', 'history-list', 'history-read', 'history-fork')
     if not args or args[0] not in operations:
         raise ValueError('Unsupported operation')
     if args[0] in ('select', 'login') and (len(args) != 2 or args[1] not in login.EMAILS):
@@ -237,6 +237,7 @@ def main():
             elif args[0] == 'provider-delete': result = store.delete(payload.get('id'))
             elif args[0] == 'provider-import': result = store.import_current()
             elif args[0] == 'provider-models': result = model_catalog.discover(store, payload)
+            elif args[0] == 'provider-reasoning': result = store.reasoning(payload.get('id'), payload.get('effort'), payload.get('model'))
             else: result = store.restore(force=True)
             print(json.dumps(result, ensure_ascii=True))
             return

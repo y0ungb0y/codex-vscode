@@ -142,7 +142,7 @@ class Providers:
         if old and 'models' not in payload:
             record['models'] = model_ids(old.get('models'), record['model'])
         if old:
-            for key in ('sourceId', 'catalogPath'):
+            for key in ('sourceId', 'catalogPath', 'reasoningByModel'):
                 if key in old: record[key] = old[key]
         key = payload.get('apiKey', '')
         if not isinstance(key, str): raise ValueError('API Key 格式无效。')
@@ -181,6 +181,8 @@ class Providers:
         record = self.validate({'name': str(table.get('name') or active), 'baseUrl': str(table.get('base_url') or ''),
                                 'model': str(doc.get('model') or '')})
         record.update({'id': existing['id'] if existing else uuid.uuid4().hex, 'sourceId': active})
+        if existing and 'reasoningByModel' in existing:
+            record['reasoningByModel'] = existing['reasoningByModel']
         if doc.get('model_catalog_json'):
             record['catalogPath'] = str(doc['model_catalog_json'])
         updated = [record if p['id'] == existing['id'] else p for p in records] if existing else records + [record]
@@ -199,6 +201,48 @@ class Providers:
         name = datetime.datetime.now().strftime('%Y%m%d-%H%M%S-') + uuid.uuid4().hex[:8] + '.toml'
         return {self.root / 'config-backups' / name: raw}
 
+    def catalog_for(self, record):
+        path = record.get('catalogPath')
+        if path:
+            record = {**record, 'catalogPath': self.config.parent / pathlib.Path(path).expanduser()}
+        return build_catalog(record)
+
+    @staticmethod
+    def reasoning_options(record, catalog):
+        entry = next(e for e in catalog['models'] if e['slug'] == record['model'])
+        efforts = [e['effort'] for e in entry['supported_reasoning_levels']]
+        default = entry.get('default_reasoning_level')
+        if default not in efforts:
+            default = efforts[0]
+        saved = record.get('reasoningByModel', {}).get(record['model'])
+        return efforts, default, saved if saved in efforts else None
+
+    def reasoning(self, number, effort=None, expected_model=None):
+        check_id(number)
+        records = self.records()
+        record = next((p for p in records if p['id'] == number), None)
+        if record is None:
+            raise ValueError('供应商已不存在，请刷新。')
+        choices, default, saved = self.reasoning_options(record, self.catalog_for(record))
+        if effort is None:
+            return {'model': record['model'], 'choices': choices, 'defaultEffort': default, 'savedEffort': saved}
+        if expected_model is not None and expected_model != record['model']:
+            raise ValueError('默认模型已更改，请重新选择思考程度。')
+        if effort != 'auto' and effort not in choices:
+            raise ValueError('此模型没有该思考档位，请重新选择。')
+        overrides = dict(record.get('reasoningByModel', {}))
+        if effort == 'auto':
+            overrides.pop(record['model'], None)
+        else:
+            overrides[record['model']] = effort
+        updated = {**record, 'reasoningByModel': overrides}
+        active = self.snapshot()['activeId'] == number
+        changes = {self.registry: self.encode({'providers': [updated if p['id'] == number else p for p in records]})}
+        if active:
+            changes.update(self.activation_changes(updated))
+        commit(changes, {self.config: self.expected_config} if active else None)
+        return {**self.snapshot(), 'requiresReload': active}
+
     def activation_changes(self, record):
         raw, doc = self.document()
         self.expected_config = raw
@@ -213,9 +257,12 @@ class Providers:
                     if key in original: del original[key]
                     if key in doc: original[key] = copy.deepcopy(doc[key])
             state['original'] = tomlkit.dumps(original)
-        catalog = build_catalog(record)
-        default_entry = next(e for e in catalog['models'] if e['slug'] == record['model'])
-        old_effort = doc.get('model_reasoning_effort')
+        catalog = self.catalog_for(record)
+        _, default_effort, saved_effort = self.reasoning_options(record, catalog)
+        for entry in catalog['models']:
+            preferred = record.get('reasoningByModel', {}).get(entry['slug'])
+            if any(level['effort'] == preferred for level in entry['supported_reasoning_levels']):
+                entry['default_reasoning_level'] = preferred
         old_tier = doc.get('service_tier')
         for field in FIELDS:
             if field in doc: del doc[field]
@@ -223,9 +270,7 @@ class Providers:
         doc['model'] = record['model']
         catalog_path = self.root / 'catalogs' / (record['id'] + '.json')
         doc['model_catalog_json'] = str(catalog_path.resolve())
-        efforts = [e.get('effort') for e in default_entry.get('supported_reasoning_levels', [])]
-        if efforts:
-            doc['model_reasoning_effort'] = old_effort if old_effort in efforts else default_entry.get('default_reasoning_level') or efforts[0]
+        doc['model_reasoning_effort'] = saved_effort or default_effort
         doc['web_search'] = 'disabled'
         if record['model'].lower().startswith(('gpt-', 'o1', 'o3', 'o4')) and old_tier:
             doc['service_tier'] = old_tier

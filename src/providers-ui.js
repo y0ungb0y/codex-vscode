@@ -6,6 +6,9 @@ function escape(value) {
   return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 }
 
+const effortLabels = { none: '不推理', minimal: '极低', low: '低', medium: '中', high: '高', xhigh: '极高', max: '最高', ultra: 'Ultra' };
+const effortLabel = effort => Object.hasOwn(effortLabels, effort) ? effortLabels[effort] : effort;
+
 function formHtml(webview, record, storage, application = 'codex') {
   const nonce = crypto.randomBytes(24).toString('base64');
   const claude = application === 'claude';
@@ -57,9 +60,10 @@ function createProviderUI(context, client, hooks) {
     getChildren(node) {
       if (!node) return (snapshot()?.providers || []).map(record => ({ kind: 'provider', record }));
       if (node.kind !== 'provider') return [];
-      if (node.kind === 'model') return [];
       return [{ label: node.record.baseUrl, icon: 'link' },
         { label: `模型：${node.record.model}`, icon: 'symbol-method' },
+        ...(!claude ? [{ label: `思考程度：${effortLabel(node.record.reasoningByModel?.[node.record.model]) || '自动'}`,
+          icon: 'settings-gear', command: { command: 'cxAccounts.providerReasoning', title: '设置思考程度', arguments: [node] } }] : []),
         { label: node.record.hasKey ? 'API Key 已保存' : 'API Key 缺失，请编辑', icon: 'key' },
         { label: `${claude ? 'Anthropic Messages' : 'Responses API'} · 供应商独立计费`, icon: 'info' }].map(detail => ({ kind: 'detail', ...detail }))
         .concat((node.record.models || [node.record.model]).map(model => ({ kind: 'model', model, record: node.record })));
@@ -73,7 +77,8 @@ function createProviderUI(context, client, hooks) {
       }
       if (node.kind === 'detail') {
         const item = new vscode.TreeItem(node.label);
-        item.tooltip = node.label; item.iconPath = new vscode.ThemeIcon(node.icon); return item;
+        item.tooltip = node.command ? '设置此供应商默认模型的思考程度' : node.label;
+        item.command = node.command; item.iconPath = new vscode.ThemeIcon(node.icon); return item;
       }
       const p = node.record;
       const item = new vscode.TreeItem(`${p.name}${p.selected ? ' · 当前接入' : ''}`, vscode.TreeItemCollapsibleState.Collapsed);
@@ -186,8 +191,31 @@ function createProviderUI(context, client, hooks) {
     if (result.requiresReload) await reloaded(result);
     else notify('默认模型已保存，启用此供应商后生效。');
   }
+  async function selectReasoning(argument) {
+    let record = argument?.record;
+    if (!record) {
+      const providers = snapshot()?.providers || [];
+      if (!providers.length) return notify('请先添加 Codex 第三方供应商。');
+      const picked = await vscode.window.showQuickPick(providers.map(p => ({ label: p.name, description: p.model, record: p })),
+        { title: '选择 Codex 第三方供应商' });
+      record = picked?.record;
+    }
+    if (!record) return;
+    const { model, choices, defaultEffort, savedEffort } = await hooks.run(() => client.providerRequest('reasoning', { id: record.id }));
+    const current = savedEffort || 'auto';
+    const picked = await vscode.window.showQuickPick([
+      { label: `自动（${effortLabel(defaultEffort)}）`, effort: 'auto' },
+      ...choices.map(effort => ({ label: effortLabel(effort), detail: effort, effort })),
+    ].map(item => ({ ...item, description: current === item.effort ? '当前设置' : undefined })),
+    { title: `思考程度 · ${model}`, placeHolder: '以供应商实际支持的档位为准' });
+    if (!picked) return;
+    const result = await hooks.run(async () => hooks.update(await client.providerRequest('reasoning', { id: record.id, model, effort: picked.effort })));
+    if (result.requiresReload) await reloaded(result);
+    else notify('思考程度已保存，启用此供应商后生效。');
+  }
   const handlers = { providerAdd: () => edit(), providerEdit: edit, providerSwitch: select, providerDelete: remove,
     providerRestore: restore, providerImport: importCurrent, providerModels: selectModels, providerModel: defaultModel };
+  if (!claude) handlers.providerReasoning = selectReasoning;
   if (claude) {
     handlers.providerImportCC = async () => {
       const result = await hooks.run(async () => hooks.update(await client.providerRequest('import-cc')));

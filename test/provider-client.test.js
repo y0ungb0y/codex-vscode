@@ -19,6 +19,11 @@ test('real JSON bridge accepts a key on stdin and returns only supplier metadata
     assert.ok(!JSON.stringify(saved).includes('cx-client-fixture-key'));
     const enabled = await client.providerRequest('select', { id: saved.savedId });
     assert.equal(enabled.activeId, saved.savedId);
+    const reasoning = await client.providerRequest('reasoning', { id: saved.savedId });
+    assert.ok(reasoning.choices.includes('high'));
+    const changed = await client.providerRequest('reasoning', { id: saved.savedId, model: reasoning.model, effort: 'high' });
+    assert.equal(changed.requiresReload, true);
+    assert.match(fs.readFileSync(path.join(root, 'codex', 'config.toml'), 'utf8'), /^model_reasoning_effort = "high"/m);
     const snapshot = await client.request('snapshot');
     assert.equal(snapshot.providerState.mode, 'thirdParty');
     assert.equal(snapshot.accounts.length, 3);
@@ -26,6 +31,11 @@ test('real JSON bridge accepts a key on stdin and returns only supplier metadata
     assert.equal((await client.request('snapshot')).providerState.mode, 'thirdParty');
     const restored = await client.providerRequest('restore');
     assert.equal(restored.mode, 'official');
+    await client.providerRequest('select', { id: saved.savedId });
+    assert.match(fs.readFileSync(path.join(root, 'codex', 'config.toml'), 'utf8'), /^model_reasoning_effort = "high"/m);
+    await client.providerRequest('reasoning', { id: saved.savedId, model: reasoning.model, effort: 'auto' });
+    assert.match(fs.readFileSync(path.join(root, 'codex', 'config.toml'), 'utf8'), /^model_reasoning_effort = "medium"/m);
+    await client.providerRequest('restore');
     await client.providerRequest('delete', { id: saved.savedId });
     assert.equal((await client.request('snapshot')).providerState.providers.length, 0);
   } finally {

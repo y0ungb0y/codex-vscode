@@ -29,7 +29,7 @@ test('provider sidebar opens a protected form, saves and activates, edits withou
         panels.push(panel); return panel;
       },
       async showInformationMessage() {},
-      async showQuickPick(items) { return items; },
+      async showQuickPick(items, options) { return options.canPickMany ? items : items.find(item => item.effort === 'high'); },
       async showWarningMessage(message, options, ...choices) { return choices.includes('删除') ? '删除' : '只启用，稍后重载'; },
       async showErrorMessage(message) { throw new Error(message); },
     },
@@ -51,6 +51,8 @@ test('provider sidebar opens a protected form, saves and activates, edits withou
       providers: data.providers.map(p => ({ ...p, selected: p.id === payload.id })) };
     if (operation === 'delete') return { ...data, providers: [] };
     if (operation === 'models') return { models: ['fixture-model', 'deepseek-fixture'], notice: 'fixture notice' };
+    if (operation === 'reasoning' && !payload.effort) return { model: 'fixture-model', choices: ['low', 'medium', 'high'], defaultEffort: 'medium' };
+    if (operation === 'reasoning') return { ...data, requiresReload: true };
     throw new Error('Unexpected fixture operation');
   } };
   const context = { subscriptions: [] };
@@ -79,6 +81,10 @@ test('provider sidebar opens a protected form, saves and activates, edits withou
     const row = ui.tree.provider.getChildren()[0];
     assert.match(ui.tree.provider.getTreeItem(row).label, /当前接入/);
     assert.ok(ui.tree.provider.getChildren(row).some(child => child.label === 'API Key 已保存'));
+    const setting = ui.tree.provider.getChildren(row).find(child => child.label === '思考程度：自动');
+    const command = ui.tree.provider.getTreeItem(setting).command;
+    await commands.get(command.command)(...command.arguments);
+    assert.deepEqual(calls.at(-1), { operation: 'reasoning', payload: { id: 'fixture-id', model: 'fixture-model', effort: 'high' } });
     await commands.get('cxAccounts.providerEdit')(row);
     assert.match(panels[1].webview.html, /&lt;script&gt;fixture&lt;\/script&gt;/);
     assert.ok(!panels[1].webview.html.includes('fixture-key'));
