@@ -317,6 +317,13 @@ class Providers:
                     del definitions[name]
         if 'model_providers' in doc and not definitions and (original is None or 'model_providers' not in original):
             del doc['model_providers']
+        # Keep the official Codex model picker pointed at CX's refreshed
+        # full-schema catalog when one exists. Third-party activation replaces
+        # this field with its provider-specific catalog and restore puts it
+        # back here.
+        official_catalog = self.config.parent / 'cc-switch-model-catalog.json'
+        if official_catalog.is_file():
+            doc['model_catalog_json'] = str(official_catalog.resolve())
         # Registry/secrets and external dormant definitions remain available.
         content = tomlkit.dumps(doc).encode('utf-8')
         changes = self.backup_changes(raw) if content != raw or state else {}

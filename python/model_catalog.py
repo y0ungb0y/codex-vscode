@@ -85,6 +85,42 @@ def _cache_entries(home):
     return result
 
 
+def _raw_cache_entries(home):
+    """Return native entries unchanged so app-server can validate the schema."""
+    document = _document(pathlib.Path(home) / 'models_cache.json')
+    result = {}
+    for item in document.get('models', []):
+        if not isinstance(item, dict) or not valid_model(item.get('slug')):
+            continue
+        if item.get('visibility', 'list') == 'list' and item.get('supported_in_api', True):
+            result[item['slug']] = copy.deepcopy(item)
+    return result
+
+
+def _configure_official_catalog(home, target):
+    """Point an official Codex config at the refreshed full-schema catalog."""
+    config = pathlib.Path(home) / 'config.toml'
+    if not config.exists() or config.is_symlink():
+        return False
+    try:
+        import sys
+        sys.path.insert(0, str(pathlib.Path(__file__).parent / 'vendor'))
+        import tomlkit
+        from provider_key import atomic_write
+        raw = config.read_bytes()
+        document = tomlkit.parse(raw.decode('utf-8-sig'))
+        if str(document.get('model_provider', 'openai')) != 'openai':
+            return False
+        value = str(target.resolve())
+        if document.get('model_catalog_json') == value:
+            return False
+        document['model_catalog_json'] = value
+        atomic_write(config, tomlkit.dumps(document).encode('utf-8'))
+        return True
+    except (OSError, ValueError, TypeError, UnicodeError):
+        return False
+
+
 def _rpc_entry(item):
     if not isinstance(item, dict):
         return None
@@ -124,6 +160,7 @@ def refresh_official(codex_home):
         if entry and entry.get('visibility', 'list') == 'list' and entry.get('supported_in_api', True):
             existing[entry['slug']] = entry
     cached = _cache_entries(home)
+    raw_cached = _raw_cache_entries(home)
     discovered = {}
     source = []
     try:
@@ -139,16 +176,29 @@ def refresh_official(codex_home):
     except Exception:
         # Offline or an older backend is still useful when its cache exists.
         pass
+    # The native app-server validates the full catalog schema.  Start from a
+    # native cache entry for every model, then overlay the discovered/display
+    # fields.  This keeps the catalog usable by the official VS Code plugin
+    # instead of producing a lightweight third-party-only catalog.
+    template = next(iter(raw_cached.values()), None)
     merged = {}
-    for entries in (existing, cached, discovered):
-        for slug, entry in entries.items():
-            merged[slug] = {**merged.get(slug, {}), **copy.deepcopy(entry)}
+    for slug in dict.fromkeys(list(raw_cached) + list(discovered) + list(cached) + list(existing)):
+        entry = copy.deepcopy(raw_cached.get(slug) or template or {})
+        for source_entries in (existing, cached, discovered):
+            if slug in source_entries:
+                entry.update(copy.deepcopy(source_entries[slug]))
+        entry['slug'] = slug
+        entry.setdefault('display_name', slug)
+        entry['visibility'] = 'list'
+        entry['supported_in_api'] = True
+        merged[slug] = entry
     if not merged:
         raise ValueError('Codex 模型目录为空；请先登录官方账号并重试。')
     # Stable ordering follows the backend/cache order where possible, then
     # keeps any older manually-added entries at the end.
-    order = list(discovered) + [slug for slug in cached if slug not in discovered] + [
-        slug for slug in existing if slug not in discovered and slug not in cached]
+    order = list(discovered) + [slug for slug in raw_cached if slug not in discovered] + [
+        slug for slug in cached if slug not in discovered and slug not in raw_cached] + [
+        slug for slug in existing if slug not in discovered and slug not in cached and slug not in raw_cached]
     entries = [merged[slug] for slug in dict.fromkeys(order)]
     target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     payload = json.dumps({'models': entries}, ensure_ascii=False, indent=2).encode('utf-8')
@@ -162,9 +212,11 @@ def refresh_official(codex_home):
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
+    configured = _configure_official_catalog(home, target)
     return {'ok': True, 'path': str(target), 'count': len(entries),
             'models': [entry['slug'] for entry in entries],
             'source': '+'.join(source) if source else 'models_cache',
+            'configured': configured,
             'notice': '官方 Codex 模型目录已刷新；目录是可用性提示，最终权限仍以实际请求为准。'}
 
 

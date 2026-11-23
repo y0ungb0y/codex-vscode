@@ -72,9 +72,10 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(catalog['models'][0]['context_window'], 333000)
         self.assertNotIn('stale-model', json.dumps(catalog))
 
-    def test_official_catalog_refresh_merges_native_list_and_cache_without_runtime_prompts(self):
+    def test_official_catalog_refresh_merges_native_list_and_cache_without_account_data(self):
         home = self.base / 'codex-home'
         home.mkdir()
+        (home / 'config.toml').write_text('model_provider = "openai"\n', encoding='utf-8')
         (home / 'cc-switch-model-catalog.json').write_text(json.dumps({
             'models': [{'slug': 'existing-model', 'display_name': 'Existing'}]}), encoding='utf-8')
         (home / 'models_cache.json').write_text(json.dumps({'models': [
@@ -101,8 +102,10 @@ class CatalogTests(unittest.TestCase):
         slugs = [item['slug'] for item in document['models']]
         self.assertEqual(slugs, ['native-model', 'cached-model', 'existing-model'])
         self.assertEqual(result['count'], 3)
+        self.assertTrue(result['configured'])
+        self.assertIn('model_catalog_json', (home / 'config.toml').read_text(encoding='utf-8'))
         self.assertNotIn('hidden-model', json.dumps(document))
-        self.assertNotIn('secret prompt', json.dumps(document))
+        self.assertNotIn('api_key', json.dumps(document).lower())
 
 
 class HistoryTests(unittest.TestCase):
