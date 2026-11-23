@@ -259,27 +259,16 @@ class Providers:
     def restore(self, official=False, force=False):
         raw, doc = self.document()
         state = self.load(self.state_path, None)
+        if official:
+            return self.restore_official(raw, doc, state)
         if state and not force and not self.matches(doc, state):
             raise ValueError('接入配置已被外部修改。请先使用“恢复接入前配置”，再切换。')
         if not state:
-            if official and str(doc.get('model_provider', 'openai')) != 'openai':
-                raise ValueError('当前为 CX 以外的供应商配置；请先手动恢复官方配置再选择账号。')
-            if official and doc.get('forced_login_method') == 'api':
-                doc['forced_login_method'] = 'chatgpt'
-                changes = self.backup_changes(raw)
-                changes[self.config] = tomlkit.dumps(doc).encode('utf-8')
-                commit(changes, {self.config: raw})
             return self.snapshot()
         original = tomlkit.parse(state['original'])
         for field in FIELDS if state.get('schema', 2) >= 3 else OLD_FIELDS:
             if field in doc: del doc[field]
             if field in original: doc[field] = copy.deepcopy(original[field])
-        # Explicit ChatGPT selection always returns to the official provider.
-        if official and str(doc.get('model_provider', 'openai')) != 'openai':
-            for field in ('model_provider', 'model', 'review_model', 'model_catalog_json'):
-                if field in doc: del doc[field]
-        if official and doc.get('forced_login_method') == 'api':
-            doc['forced_login_method'] = 'chatgpt'
         owned = {'cx_' + p['id'] for p in self.records()}
         if 'model_providers' in doc:
             for name in list(doc['model_providers']):
@@ -292,6 +281,50 @@ class Providers:
         changes[self.state_path] = None
         commit(changes, {self.config: raw})
         return {**self.snapshot(), 'requiresReload': True}
+
+    def restore_official(self, raw, doc, state):
+        """An explicit account selection is also an explicit return to ChatGPT.
+
+        A third-party client or Codex model picker may have changed the managed
+        fields. Requiring that old fingerprint here traps the user in API mode.
+        Keep strict fingerprint checks for normal provider switching/restoration.
+        """
+        active = str(doc.get('model_provider', 'openai'))
+        original = tomlkit.parse(state['original']) if state else None
+        if active != 'openai' or 'openai' in doc.get('model_providers', {}):
+            # Restore preferences only from a known official baseline. Imported
+            # third-party model IDs, catalogs and reasoning options cannot be
+            # carried over to an unrelated ChatGPT account.
+            baseline = original if original is not None and str(original.get('model_provider', 'openai')) == 'openai' else {}
+            for field in FIELDS:
+                if field in doc:
+                    del doc[field]
+                if field in baseline:
+                    doc[field] = copy.deepcopy(baseline[field])
+        doc['model_provider'] = 'openai'
+        doc['forced_login_method'] = 'chatgpt'
+        # A previous account's forced workspace can reject a valid new login.
+        if 'forced_chatgpt_workspace_id' in doc:
+            del doc['forced_chatgpt_workspace_id']
+        # The built-in provider must not inherit an API gateway named "openai".
+        definitions = doc.get('model_providers', {})
+        if 'openai' in definitions:
+            del definitions['openai']
+        if original is not None:
+            owned = {'cx_' + p['id'] for p in self.records()}
+            for name in list(definitions):
+                if name in owned and name not in original.get('model_providers', {}):
+                    del definitions[name]
+        if 'model_providers' in doc and not definitions and (original is None or 'model_providers' not in original):
+            del doc['model_providers']
+        # Registry/secrets and external dormant definitions remain available.
+        content = tomlkit.dumps(doc).encode('utf-8')
+        changes = self.backup_changes(raw) if content != raw or state else {}
+        changes[self.config] = content
+        if state:
+            changes[self.state_path] = None
+        commit(changes, {self.config: raw})
+        return {**self.snapshot(), 'requiresReload': content != raw}
 
     def delete(self, number):
         check_id(number)

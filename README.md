@@ -26,7 +26,7 @@ Base URL 使用供应商的 Anthropic 兼容入口，例如 `https://gateway.exa
 
 默认读写 `CLAUDE_CONFIG_DIR` 或 `~/.claude`，可在 `cxAccounts.claudeHome` 指定目录（需与 Claude Code 实际配置目录一致）；CC Switch 目录可通过 `cxAccounts.ccSwitchHome` 指定。Claude 与 Codex 的供应商记录、密钥和运行配置分开保存。
 
-Windows 本机已完成当前供应商的真实接口与 Claude 官方后端验证。AMAX 已同步安装 CX 0.4.0，并通过 Python 3.8 与 VS Code Server Node 的 47 项隔离测试；未复制本机的供应商密钥或 Claude 配置。远程使用时，在 **SSH: amax** 窗口安装 Claude Code 官方扩展，再在 CX 的 Claude 供应商区域添加密钥或导入服务器已有配置。AMAX 安装包位于 `/data1/xinwang/cx-codex-accounts-0.5.0.vsix`。
+Windows 本机已完成当前供应商的真实接口与 Claude 官方后端验证。AMAX 已同步安装 CX 0.4.0，并通过 Python 3.8 与 VS Code Server Node 的 47 项隔离测试；未复制本机的供应商密钥或 Claude 配置。远程使用时，在 **SSH: amax** 窗口安装 Claude Code 官方扩展，再在 CX 的 Claude 供应商区域添加密钥或导入服务器已有配置。AMAX 安装包位于 `/data1/xinwang/cx-codex-accounts-0.5.1.vsix`。
 
 配置依据：[Claude Code VS Code 官方文档](https://code.claude.com/docs/en/vs-code#use-third-party-providers)、[用户设置与优先级](https://code.claude.com/docs/en/settings)、[模型配置](https://code.claude.com/docs/en/model-config)。
 
@@ -56,14 +56,14 @@ Windows 本机已完成当前供应商的真实接口与 Claude 官方后端验�
 
 ## 安装
 
-1. 在 VS Code 按 `Ctrl+Shift+P`，执行 **扩展：从 VSIX 安装…**（英文界面为 **Extensions: Install from VSIX...**），选择 `cx-codex-accounts-0.5.0.vsix`。
+1. 在 VS Code 按 `Ctrl+Shift+P`，执行 **扩展：从 VSIX 安装…**（英文界面为 **Extensions: Install from VSIX...**），选择 `cx-codex-accounts-0.5.1.vsix`。
 2. 本机窗口安装到本机。连接 AMAX 时，在该远程窗口再次安装，确认扩展位于 **SSH: amax**。
 3. 在命令面板执行 **开发人员：重新加载窗口**（英文界面为 **Developer: Reload Window**），然后点击左侧 **CX 账号** 图标。
 
 也可通过终端安装：
 
 ```powershell
-code --install-extension .\cx-codex-accounts-0.5.0.vsix
+code --install-extension .\cx-codex-accounts-0.5.1.vsix
 ```
 
 扩展在当前工作区所在的机器上运行：本机窗口运行在 Windows，远程窗口运行在服务器。
@@ -106,7 +106,7 @@ code --install-extension .\cx-codex-accounts-0.5.0.vsix
 
 修改正在使用的供应商后也需要重载。删除某条供应商只移除本机保存的密钥，不会撤销供应商平台上的密钥。
 
-要切回 ChatGPT 订阅，直接在上方账号区域选择 **账号 1 / 2 / 3**，扩展会恢复官方接入并选择该账号，随后重载窗口。
+要切回 ChatGPT 订阅，直接在上方账号区域选择已授权账号，随后重载窗口。0.5.1 起，即使供应商由 CC Switch 配置、CX 没有恢复记录，或第三方接入字段后来发生变化，也可以通过选择账号返回官方。切回会备份当前配置，设置官方 ChatGPT 登录，并清理第三方模型目录、API 登录限制和旧账号工作区限制。存在官方配置基线时恢复其模型设置；只有第三方配置基线时使用官方默认模型。MCP、项目与权限等无关设置保留。
 供应商区域右上角的菜单提供 **恢复接入前配置**：恢复 CX 首次启用第三方服务前的模型和接入字段，同时保留其他设置的后续修改。
 如果接入字段被外部程序修改，普通切换会停止，请检查后使用该恢复入口。
 
@@ -228,7 +228,7 @@ npm run test:python
 npm run package
 ```
 
-生成的安装包位于 `releases/cx-codex-accounts-0.5.0.vsix`。
+生成的安装包位于 `releases/cx-codex-accounts-0.5.1.vsix`。
 
 源码中的 `python/quota_status.py` 和 `python/login_account.py` 来自现有 CX 工具。
 扩展没有复制 GitHub 第三方项目的实现。

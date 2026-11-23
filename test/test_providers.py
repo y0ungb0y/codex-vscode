@@ -136,7 +136,7 @@ class ProviderTests(unittest.TestCase):
         text = self.store.config.read_text().replace('model = "test-model"', 'model = "external-model"')
         text = text.replace('keep-this', 'user-edit')
         self.store.config.write_text(text, encoding='utf-8')
-        with self.assertRaises(ValueError): self.store.restore(official=True)
+        with self.assertRaises(ValueError): self.store.restore()
         self.store.restore(force=True)
         self.assertIn('user-edit', self.store.config.read_text())
         self.assertIn('official-model', self.store.config.read_text())
@@ -193,7 +193,94 @@ class ProviderTests(unittest.TestCase):
         self.store.activate(number)
         text = self.store.config.read_text().replace('https://gateway.example.invalid/v1', 'https://changed.example.invalid/v1')
         self.store.config.write_text(text, encoding='utf-8')
-        with self.assertRaises(ValueError): self.store.restore(official=True)
+        with self.assertRaises(ValueError): self.store.restore()
+
+    def test_explicit_official_return_handles_model_picker_and_external_changes(self):
+        number = self.save()['savedId']
+        self.store.activate(number)
+        text = self.store.config.read_text().replace('model = "test-model"', 'model = "external-model"')
+        text = text.replace('keep-this', 'user-edit')
+        self.store.config.write_text(text, encoding='utf-8')
+        with self.assertRaises(ValueError): self.store.activate(number)
+        self.store.restore(official=True)
+        _, doc = self.store.document()
+        self.assertEqual(doc['model_provider'], 'openai')
+        self.assertEqual(doc['model'], 'official-model')
+        self.assertEqual(doc['forced_login_method'], 'chatgpt')
+        self.assertIn('user-edit', self.store.config.read_text())
+        self.assertFalse(self.store.state_path.exists())
+        self.assertEqual(self.store.snapshot()['providers'][0]['hasKey'], True)
+
+    def test_official_return_from_unimported_cc_switch_without_recovery_state(self):
+        raw = ('model_provider = "custom"\nmodel = "deepseek-third-party"\n'
+               'model_catalog_json = "third-party.json"\nmodel_reasoning_effort = "low"\n'
+               'service_tier = "fast"\nforced_login_method = "api"\nforced_chatgpt_workspace_id = "other-workspace"\n'
+               '[model_providers.custom]\nname = "external"\nbase_url = "https://gateway.example.invalid/v1"\n'
+               'wire_api = "responses"\nexperimental_bearer_token = "fixture-external-key"\n'
+               '[mcp_servers.test]\ncommand = "keep-this"\n')
+        self.store.config.write_text(raw, encoding='utf-8')
+        self.assertFalse(self.store.state_path.exists())
+        result = self.store.restore(official=True)
+        _, doc = self.store.document()
+        self.assertEqual(result['mode'], 'official')
+        self.assertEqual(doc['forced_login_method'], 'chatgpt')
+        for field in ('model', 'model_catalog_json', 'model_reasoning_effort', 'service_tier', 'forced_chatgpt_workspace_id'):
+            self.assertNotIn(field, doc)
+        self.assertEqual(doc['model_providers']['custom']['experimental_bearer_token'], 'fixture-external-key')
+        self.assertEqual(doc['mcp_servers']['test']['command'], 'keep-this')
+        self.assertTrue(any(p.read_text(encoding='utf-8') == raw for p in (self.store.root / 'config-backups').glob('*.toml')))
+
+    def test_bridge_selects_official_account_after_external_api_mode_without_state(self):
+        raw = ('model_provider = "external"\nmodel = "third-party-only"\nforced_login_method = "api"\n'
+               '[model_providers.external]\nbase_url = "https://gateway.example.invalid/v1"\nwire_api = "responses"\n')
+        self.store.config.write_text(raw, encoding='utf-8')
+        auth = self.store.config.parent / 'auth.json'
+        auth.write_bytes(fixture('3'))
+        with mock.patch.object(bridge.login, 'ROOT', self.base / 'accounts'), mock.patch.object(bridge.login, 'DEFAULT', auth):
+            target = bridge.login.ROOT / '1/auth.json'
+            target.parent.mkdir(parents=True)
+            target.write_bytes(fixture('1'))
+            result = bridge.select('1')
+        self.assertEqual(result['selected'], '1')
+        self.assertEqual(result['providerState']['mode'], 'official')
+        self.assertEqual(auth.read_bytes(), fixture('1'))
+        _, doc = self.store.document()
+        self.assertEqual(doc['forced_login_method'], 'chatgpt')
+        self.assertNotIn('model', doc)
+
+    def test_imported_api_baseline_does_not_restore_third_party_reasoning(self):
+        raw = ('model_provider = "custom"\nmodel = "custom-model"\nmodel_reasoning_effort = "none"\n'
+               'web_search = "disabled"\nservice_tier = "fast"\n[model_providers.custom]\n'
+               'name = "external"\nbase_url = "https://gateway.example.invalid/v1"\n'
+               'wire_api = "responses"\nexperimental_bearer_token = "fixture-key"\n')
+        self.store.config.write_text(raw, encoding='utf-8')
+        self.store.import_current()
+        self.store.restore(official=True)
+        _, doc = self.store.document()
+        for field in ('model', 'model_reasoning_effort', 'web_search', 'service_tier'):
+            self.assertNotIn(field, doc)
+
+    def test_official_provider_name_cannot_leave_gateway_override_or_workspace(self):
+        raw = ('model_provider = "openai"\nforced_login_method = "api"\n'
+               'forced_chatgpt_workspace_id = "old-workspace"\n[model_providers.openai]\n'
+               'base_url = "https://gateway.example.invalid/v1"\n')
+        self.store.config.write_text(raw, encoding='utf-8')
+        self.store.restore(official=True)
+        _, doc = self.store.document()
+        self.assertNotIn('openai', doc.get('model_providers', {}))
+        self.assertNotIn('forced_chatgpt_workspace_id', doc)
+        self.assertEqual(doc['forced_login_method'], 'chatgpt')
+
+    def test_failed_account_switch_restores_drifted_provider_and_recovery_state(self):
+        number = self.save()['savedId']
+        self.store.activate(number)
+        self.store.config.write_text(self.store.config.read_text().replace('test-model', 'external-model'), encoding='utf-8')
+        before = self.store.config.read_bytes()
+        before_state = self.store.state_path.read_bytes()
+        with self.assertRaises(RuntimeError):
+            with self.store.account_mode(): raise RuntimeError('fixture account write failure')
+        self.assertEqual(self.store.config.read_bytes(), before)
+        self.assertEqual(self.store.state_path.read_bytes(), before_state)
 
     def test_v02_state_migrates_and_restores_newly_managed_model_parameters(self):
         number = self.save(model='deepseek-fixture')['savedId']
